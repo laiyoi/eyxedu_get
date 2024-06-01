@@ -1,9 +1,12 @@
-import json, time
+import json, time, requests, threading
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
+
+save_path = Path("G:\网课")
 
 url = "https://apppc.eyxedu.com/course-review"
 with open("cookies.json", "r", encoding="utf-8") as f:
@@ -20,9 +23,9 @@ def get_review_list(driver):
 
 def wait_for_content_load_in_menu(driver):
     WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "el-card.pointer.is-always-shadow"))
+        EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
         )
-    time.sleep(0.1)
+    time.sleep(0.07)
     
 def turn_page(driver, page):
     page_box = driver.find_element(
@@ -32,6 +35,31 @@ def turn_page(driver, page):
     numbox.clear()
     numbox.send_keys(str(page))
     numbox.send_keys(Keys.RETURN)
+
+def download_ts(url, name):
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(save_path / name, "wb") as f:
+            f.write(response.content)
+        print(f"Downloaded {url}")
+    else:
+        print(f"Failed to download {url}")
+
+def find_ts_url(driver):
+    entries = driver.execute_script("""
+        var entries = window.performance.getEntries();
+        var urls = [];
+        for (var i = 0; i < entries.length; i++) {
+            if (entries[i].name.endsWith('.ts')) {
+                urls.push(entries[i].name);
+            }
+        }
+        return urls;
+    """)
+    if entries:
+        return entries[0]
+    else:
+        return None
 
 driver = webdriver.Edge()
 driver.get(url)
@@ -56,11 +84,26 @@ with open("index.html", "w", encoding="utf-8") as f:
 for page in range(1, page_num+1):
     for i in range(len(get_review_list(driver))):
         wait_for_content_load_in_menu(driver)
-        get_review_list(driver)[i].click()
+        cards = get_review_list(driver)
+        title = ''.join(cards[i].text.split("\n"))
+        cards[i].click()
         # 等待点击后的内容加载，可以增加等待条件
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "video-wrap"))
         )
+        # 获取.ts文件的URL
+        ts_url = None
+        while ts_url == None:
+            ts_url = find_ts_url(driver)
+            print(f"Found .ts URL in {title}:", ts_url)
+        download_ts(ts_url)
+        #threads = []
+        #for url in ts_url:
+        #    t = threading.Thread(target=download_ts, args=(ts_url, f"{title[:-4]}.ts"))
+        #    t.start()
+        #    threads.append(t)
+        #for t in threads:
+        #    t.join()
         driver.back()
         wait_for_content_load_in_menu(driver)
         if page == 1: continue
