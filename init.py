@@ -1,6 +1,7 @@
+import threading
 import json
 import time
-import subprocess, asyncio
+import subprocess
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,11 +10,12 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 
 save_path = Path("G:/网课")
-
 url = "https://apppc.eyxedu.com/course-review"
-til = ""
 with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
+
+# 特定字符检查
+STOP_KEYWORDS = ['期末试卷讲评']
 
 def get_pages(driver):
     pager = driver.find_element(By.CLASS_NAME, "el-pager")
@@ -27,7 +29,7 @@ def wait_for_content_load_in_menu(driver):
     WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
     )
-    time.sleep(0.09)
+    time.sleep(0.2)
 
 def turn_page(driver, page):
     page_box = driver.find_element(By.CLASS_NAME, "el-pagination__editor")
@@ -42,10 +44,12 @@ def clean_filename(filename):
 
 def start_download_process(url, filename, save_path):
     """启动新的终端执行下载任务"""
+    python_exe = r'venv\Scripts\python.exe'  # 相对路径
+    script_path = r'download_task.py'  # 相对路径
     command = [
-        'cmd', '/c', r'venv\Scripts\python.exe', 'download_task.py', url, filename, str(save_path)
+        'cmd', '/c', python_exe, script_path, url, filename, str(save_path)
     ]
-    subprocess.Popen(command, shell=True)
+    return subprocess.Popen(command, shell=True)  # 返回子进程对象
 
 def find_ts_url(driver):
     entries = driver.execute_script("""
@@ -63,12 +67,23 @@ def find_ts_url(driver):
     else:
         return None
 
-async def handle_page(driver, page, save_path):
+def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
     for i in range(len(get_review_list(driver))):
+        if stop_event.is_set():
+            print("Stopping due to keyword match.")
+            break
+        
         wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
-        title = clean_filename(''.join(cards[i].text.split("\n")))  # 清理文件名
+        title = clean_filename(''.join(cards[i].text.split("\n")))
+        
+        # 检查标题是否包含停止关键词
+        if any(keyword in title for keyword in STOP_KEYWORDS):
+            print(f"Title contains stop keyword: {title}")
+            stop_event.set()  # 设置停止标志
+            break
+        
         cards[i].click()
 
         # 等待点击后的内容加载
@@ -82,10 +97,10 @@ async def handle_page(driver, page, save_path):
             ts_url = find_ts_url(driver)
             print(f"Found .ts URL in {title}:", ts_url)
 
-        # 启动新的终端进行下载
+        # 启动子进程执行下载任务
         filename = f"{title}.ts"
-        print(f"Starting download for {filename}")  # 调试信息
-        start_download_process(ts_url, filename, save_path)
+        process = start_download_process(ts_url, filename, save_path)
+        processes.append(process)
 
         driver.back()
         wait_for_content_load_in_menu(driver)
@@ -94,15 +109,25 @@ async def handle_page(driver, page, save_path):
             turn_page(driver, page)
             wait_for_content_load_in_menu(driver)
 
-def main(driver, page_num, save_path):
+def main(driver, page_num):
+    stop_event = threading.Event()  # 用于控制停止
+    processes = []  # 用于跟踪子进程
     for page in range(1, page_num + 1):
-        print(f"Handling page {page}")  # 调试信息
-        asyncio.run(handle_page(driver, page, save_path))
+        if stop_event.is_set():
+            print("Stopping due to keyword match.")
+            break
+        
+        handle_page(driver, page, stop_event, processes)
 
         # 翻页
         if page < page_num:
             turn_page(driver, page + 1)
             wait_for_content_load_in_menu(driver)
+
+    # 等待所有子进程完成
+    print("Waiting for all download processes to complete.")
+    for process in processes:
+        process.wait()  # 等待每个子进程完成
 
 if __name__ == "__main__":
     driver = webdriver.Edge()
@@ -122,7 +147,7 @@ if __name__ == "__main__":
     # 获取页数
     page_num = get_pages(driver)
 
-    main(driver, page_num, save_path)
+    main(driver, page_num)
 
     # 获取页面源代码并保存
     with open("index.html", "w", encoding="utf-8") as f:
