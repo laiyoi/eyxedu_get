@@ -15,6 +15,7 @@ def get_pages(driver):
     return int(pager.text[6:])
 
 def get_review_list(driver):
+    wait_for_content_load_in_menu(driver)
     review_list = driver.find_element(By.CLASS_NAME, "review-list")
     return review_list.find_elements(By.CLASS_NAME, "el-card.pointer.is-always-shadow")
 
@@ -60,6 +61,9 @@ def find_ts_url(driver):
     # 确保页面和资源加载完成
     driver.refresh()
     time.sleep(2)  # 根据需要调整等待时间
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "video-wrap"))
+    )
 
     entries = driver.execute_script("""
         var entries = window.performance.getEntriesByType('resource');

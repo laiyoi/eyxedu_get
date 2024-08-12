@@ -33,6 +33,9 @@ def handle_page(driver, page, stop_event, processes):
             # 清理完成的进程
             processes[:] = [p for p in processes if p.poll() is None]
 
+        driver.refresh()
+        wait_for_content_load_in_menu(driver)
+        turn_page(driver, page)
         wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
         title = clean_filename(''.join(cards[i].text.split("\n")))
@@ -46,7 +49,7 @@ def handle_page(driver, page, stop_event, processes):
             print(f"Title contains stop keyword: {title}")
             stop_event.set()  # 设置停止标志
             break
-        
+        cards = get_review_list(driver)
         cards[i].click()
 
         # 等待点击后的内容加载
@@ -66,10 +69,6 @@ def handle_page(driver, page, stop_event, processes):
 
         driver.back()
         wait_for_content_load_in_menu(driver)
-
-        if page > 1:
-            turn_page(driver, page)
-            wait_for_content_load_in_menu(driver)
 
 def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
