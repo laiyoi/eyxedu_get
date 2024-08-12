@@ -40,7 +40,7 @@ def clean_filename(filename):
         time_part = match.group(4)
 
         # 拼接结果
-        filename = f"{date_part} {time_part} {subject_part} "
+        filename = f"{date_part} {time_part} {subject_part}"
         
     else:
         # 如果无法匹配，则返回原始文件名

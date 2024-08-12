@@ -7,6 +7,7 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 from utils import get_pages, get_review_list, wait_for_content_load_in_menu, turn_page, clean_filename, start_download_process, find_ts_url
 
 save_path = Path("G:/网课")

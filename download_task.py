@@ -39,7 +39,7 @@ async def download_ts(url, filepath, retries=3):
             print(f"下载失败: {e}")
             attempt += 1
             if attempt >= retries:
-                print(f"下载 {url} 失败，已尝试 {retries} 次。")
+                print(f"下载 {Path(filepath).name} 失败，已尝试 {retries} 次。")
                 raise  # 重试次数用尽，重新抛出异常
             await asyncio.sleep(2)  # 等待 2 秒钟再重试
 
