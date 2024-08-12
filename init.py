@@ -65,20 +65,25 @@ def start_download_process(url, filepath):
     return subprocess.Popen(command, shell=True)  # 返回子进程对象
 
 def find_ts_url(driver):
+    # 确保页面和资源加载完成
+    driver.refresh()
+    time.sleep(2)  # 根据需要调整等待时间
+
     entries = driver.execute_script("""
-        var entries = window.performance.getEntries();
+        var entries = window.performance.getEntriesByType('resource');
         var urls = [];
         for (var i = 0; i < entries.length; i++) {
-            if (entries[i].name.endsWith('.ts')) {
-                urls.push(entries[i].name);
+            var entry = entries[i];
+            if (entry.name.endsWith('.ts')) {
+                urls.push(entry.name);
             }
         }
         return urls;
     """)
+
     if entries:
         return entries[0]
-    else:
-        return None
+    return None
 
 def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
@@ -89,9 +94,11 @@ def handle_page(driver, page, stop_event, processes):
             break
         
         # 检查子进程数量
-        while len(processes) > 8:
+        while len(processes) >= 3:
             print("Too many processes. Waiting...")
             time.sleep(5)  # 等待 5 秒钟再检查
+            # 清理完成的进程
+            processes[:] = [p for p in processes if p.poll() is None]
 
         wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
