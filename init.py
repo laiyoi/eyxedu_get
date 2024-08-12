@@ -1,15 +1,17 @@
-import json, time, requests, asyncio, aiohttp
+import json
+import time
+import subprocess, asyncio
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from tqdm.asyncio import tqdm
 
 save_path = Path("G:/网课")
 
 url = "https://apppc.eyxedu.com/course-review"
+til = ""
 with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
 
@@ -25,7 +27,7 @@ def wait_for_content_load_in_menu(driver):
     WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
     )
-    time.sleep(0.07)
+    time.sleep(0.09)
 
 def turn_page(driver, page):
     page_box = driver.find_element(By.CLASS_NAME, "el-pagination__editor")
@@ -38,22 +40,12 @@ def clean_filename(filename):
     # 替换不合法字符
     return filename.replace(":", "-").replace("/", "-").replace("\\", "-").replace("?", "").replace("\"", "").replace("<", "").replace(">", "").replace("|", "")
 
-async def download_ts(url, filename, save_path):
-    """异步下载.ts文件，带有进度条"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            print(f"Start to download {filename}")
-            if response.status == 200:
-                file_path = save_path / filename
-                total_size = int(response.headers.get('content-length', 0))
-                print(f"Downloading {filename} ({total_size} bytes)")
-                with open(file_path, 'wb') as f, tqdm(total=total_size, unit='B', unit_scale=True, desc=filename, miniters=1) as pbar:
-                    async for chunk in response.content.iter_chunked(1024):
-                        f.write(chunk)
-                        pbar.update(len(chunk))
-                print(f"Download completed: {filename}")
-            else:
-                print(f"Failed to download {filename}, Status code: {response.status}")
+def start_download_process(url, filename, save_path):
+    """启动新的终端执行下载任务"""
+    command = [
+        'cmd', '/c', r'venv\Scripts\python.exe', 'download_task.py', url, filename, str(save_path)
+    ]
+    subprocess.Popen(command, shell=True)
 
 def find_ts_url(driver):
     entries = driver.execute_script("""
@@ -71,7 +63,7 @@ def find_ts_url(driver):
     else:
         return None
 
-async def handle_page(driver, page, save_path, download_tasks):
+async def handle_page(driver, page, save_path):
     """处理每个页面的下载操作"""
     for i in range(len(get_review_list(driver))):
         wait_for_content_load_in_menu(driver)
@@ -90,9 +82,10 @@ async def handle_page(driver, page, save_path, download_tasks):
             ts_url = find_ts_url(driver)
             print(f"Found .ts URL in {title}:", ts_url)
 
-        # 异步下载.ts文件，并立即开始执行
+        # 启动新的终端进行下载
         filename = f"{title}.ts"
-        download_tasks.append(asyncio.create_task(download_ts(ts_url, filename, save_path)))
+        print(f"Starting download for {filename}")  # 调试信息
+        start_download_process(ts_url, filename, save_path)
 
         driver.back()
         wait_for_content_load_in_menu(driver)
@@ -102,19 +95,14 @@ async def handle_page(driver, page, save_path, download_tasks):
             wait_for_content_load_in_menu(driver)
 
 def main(driver, page_num, save_path):
-    loop = asyncio.get_event_loop()
-    download_tasks = []
-
     for page in range(1, page_num + 1):
-        loop.run_until_complete(handle_page(driver, page, save_path, download_tasks))
+        print(f"Handling page {page}")  # 调试信息
+        asyncio.run(handle_page(driver, page, save_path))
 
         # 翻页
         if page < page_num:
             turn_page(driver, page + 1)
             wait_for_content_load_in_menu(driver)
-
-    # 等待所有下载任务完成
-    loop.run_until_complete(asyncio.gather(*download_tasks))
 
 if __name__ == "__main__":
     driver = webdriver.Edge()
