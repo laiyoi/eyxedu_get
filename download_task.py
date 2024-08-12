@@ -9,6 +9,9 @@ async def download_ts(url, filepath, retries=3):
     attempt = 0
     while attempt < retries:
         try:
+            # 定义临时文件路径
+            tmp_filepath = f"{filepath}.tmp"
+            
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     response.raise_for_status()  # 检查请求是否成功
@@ -17,14 +20,17 @@ async def download_ts(url, filepath, retries=3):
                     # 创建文件夹（如果不存在）
                     Path(filepath).parent.mkdir(parents=True, exist_ok=True)
                     
-                    with open(filepath, 'wb') as f, tqdm(total=total_size, unit='B', unit_scale=True, desc=Path(filepath).name) as pbar:
+                    with open(tmp_filepath, 'wb') as f, tqdm(total=total_size, unit='B', unit_scale=True, desc=Path(filepath).name) as pbar:
                         async for chunk in response.content.iter_chunked(1024):
                             f.write(chunk)
                             pbar.update(len(chunk))
 
                     # 验证下载文件大小是否与预期匹配
-                    if total_size and Path(filepath).stat().st_size < total_size:
+                    if total_size and Path(tmp_filepath).stat().st_size < total_size:
                         raise ValueError("下载文件不完整")
+
+                    # 文件下载完成后，重命名临时文件为目标文件
+                    Path(tmp_filepath).rename(filepath)
                     
                     print(f"下载完成: {filepath}")
                     break  # 下载成功，退出循环
