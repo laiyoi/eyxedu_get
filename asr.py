@@ -3,27 +3,21 @@ import io
 from faster_whisper import WhisperModel
 import moviepy.editor as mp
 
-def convert_ts_to_audio(ts_file_path):
+def convert_ts_to_audio(ts_file_path) -> io.BytesIO:
     """将 .ts 文件转换为内存中的音频文件"""
     video = mp.VideoFileClip(ts_file_path)
     audio = video.audio
-
-    # 将音频数据写入内存
-    audio_buffer = io.BytesIO()
-    audio.write_audiofile(audio_buffer, format='wav')
-    audio_buffer.seek(0)  # 将文件指针移动到开始位置
-    audio.close()
-    video.close()
+    audio_io = io.BytesIO()
+    audio.write_audiofile(audio_io, format='mp3', codec='mp3', logger=None)
     
-    return audio_buffer
-
-def transcribe_audio(audio_buffer):
+    # 将BytesIO的指针重置到开始位置
+    audio_io.seek(0)
+    
+    return audio_io
+def transcribe_audio(audio):
     """使用 faster-whisper 进行语音转文字"""
     model = WhisperModel("base")  # 选择合适的模型，例如 'base'、'small'、'medium'、'large'
-    
-    # 将内存中的音频数据转换为文件
-    with io.BytesIO(audio_buffer.getvalue()) as temp_audio_file:
-        result = model.transcribe(temp_audio_file)
+    result = model.transcribe(audio)
     
     return result['segments']
 
@@ -57,10 +51,10 @@ def process_folder(folder_path):
                 continue
             
             # 将 .ts 文件转换为内存中的音频文件
-            audio_buffer = convert_ts_to_audio(ts_file_path)
+            audio = convert_ts_to_audio(ts_file_path)
             
             # 使用 faster-whisper 进行语音转文字
-            segments = transcribe_audio(audio_buffer)
+            segments = transcribe_audio(audio)
             
             # 格式化转录结果为包含时间码的内容
             transcription = format_transcription_with_timestamps(segments)

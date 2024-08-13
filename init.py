@@ -16,7 +16,7 @@ with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
 
 # 特定字符检查
-STOP_KEYWORDS = ['期末试卷讲评']
+STOP_KEYWORDS = ['冲量的计算']
 
 def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
@@ -48,8 +48,6 @@ def handle_page(driver, page, stop_event, processes):
         filepath = save_path / filename
         if os.path.exists(filepath):
             continue
-        
-        wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
         cards[i].click()
 
@@ -63,7 +61,9 @@ def handle_page(driver, page, stop_event, processes):
         while ts_url is None:
             ts_url = find_ts_url(driver)
             print(f"Found .ts URL in {title}:", ts_url)
-
+        if not ts_url.endswith(".ts"):
+            filename = f"{title}.{ts_url.split('.')[-1]}"
+            filepath = save_path / filename
         # 启动子进程执行下载任务
         process = start_download_process(ts_url, filepath)
         processes.append(process)

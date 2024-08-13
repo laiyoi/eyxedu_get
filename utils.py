@@ -58,7 +58,7 @@ def start_download_process(url, filepath):
     ]
     return subprocess.Popen(command, shell=True)  # 返回子进程对象
 
-def find_ts_url(driver):
+def find_ts_url(driver)-> str:
     # 确保页面和资源加载完成
     driver.refresh()
     time.sleep(2)  # 根据需要调整等待时间
@@ -70,7 +70,7 @@ def find_ts_url(driver):
         var entries = window.performance.getEntries();
         var urls = [];
         for (var i = 0; i < entries.length; i++) {
-            if (entries[i].name.endsWith('.ts')) {
+            if (entries[i].name.endsWith('.ts') || entries[i].name.endsWith('.mp4')) {
                 urls.push(entries[i].name);
             }
         }

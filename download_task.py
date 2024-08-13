@@ -4,7 +4,7 @@ import asyncio
 from tqdm import tqdm
 from pathlib import Path
 
-async def download_ts(url, filepath, retries=3):
+async def download_ts(url, filepath, retries=114):
     """异步下载.ts文件，带有进度条和重试机制"""
     attempt = 0
     while attempt < retries:
