@@ -23,10 +23,12 @@ def wait_for_content_load_in_menu(driver):
     WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
     )
-    time.sleep(0.3)
+    time.sleep(0.2)
 
 def turn_page(driver, page):
-    page_box = driver.find_element(By.CLASS_NAME, "el-pagination__editor")
+    page_box = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "el-pagination__editor"))
+    )
     numbox = page_box.find_element(By.TAG_NAME, "input")
     numbox.clear()
     numbox.clear()

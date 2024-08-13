@@ -47,6 +47,7 @@ def handle_page(driver, page, stop_event, processes):
         filename = f"{title}.ts"
         filepath = save_path / filename
         if os.path.exists(filepath):
+            print(f"File {filename} already exists.")
             continue
         cards = get_review_list(driver)
         cards[i].click()
@@ -64,6 +65,10 @@ def handle_page(driver, page, stop_event, processes):
         if not ts_url.endswith(".ts"):
             filename = f"{title}.{ts_url.split('.')[-1]}"
             filepath = save_path / filename
+        if os.path.exists(filepath):
+            print(f"File {filename} already exists.")
+            driver.back()
+            continue
         # 启动子进程执行下载任务
         process = start_download_process(ts_url, filepath)
         processes.append(process)
@@ -75,7 +80,6 @@ def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
     processes = []  # 用于跟踪子进程
     for page in range(1, page_num + 1):
-        wait_for_content_load_in_menu(driver)
         turn_page(driver, page)
         wait_for_content_load_in_menu(driver)
         if stop_event.is_set():
