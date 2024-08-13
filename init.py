@@ -32,21 +32,23 @@ def handle_page(driver, page, stop_event, processes):
             time.sleep(5)  # 等待 5 秒钟再检查
             # 清理完成的进程
             processes[:] = [p for p in processes if p.poll() is None]
-
-        driver.refresh()
+            driver.refresh()
+            wait_for_content_load_in_menu(driver)
         
         turn_page(driver, page)
+        wait_for_content_load_in_menu(driver)
+        cards = get_review_list(driver)
+        # 检查标题是否包含停止关键词
+        if any(keyword in cards[i].text for keyword in STOP_KEYWORDS):
+            print(f"Title contains stop keyword: {title}")
+            stop_event.set()  # 设置停止标志
+            break
         title = clean_filename(''.join(cards[i].text.split("\n")))
         filename = f"{title}.ts"
         filepath = save_path / filename
         if os.path.exists(filepath):
             continue
         
-        # 检查标题是否包含停止关键词
-        if any(keyword in title for keyword in STOP_KEYWORDS):
-            print(f"Title contains stop keyword: {title}")
-            stop_event.set()  # 设置停止标志
-            break
         wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
         cards[i].click()
@@ -73,6 +75,7 @@ def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
     processes = []  # 用于跟踪子进程
     for page in range(1, page_num + 1):
+        wait_for_content_load_in_menu(driver)
         turn_page(driver, page)
         wait_for_content_load_in_menu(driver)
         if stop_event.is_set():

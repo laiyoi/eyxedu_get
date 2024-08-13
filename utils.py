@@ -29,6 +29,7 @@ def turn_page(driver, page):
     page_box = driver.find_element(By.CLASS_NAME, "el-pagination__editor")
     numbox = page_box.find_element(By.TAG_NAME, "input")
     numbox.clear()
+    numbox.clear()
     numbox.send_keys(str(page))
     numbox.send_keys(Keys.RETURN)
 
@@ -66,16 +67,16 @@ def find_ts_url(driver):
     )
 
     entries = driver.execute_script("""
-        var entries = window.performance.getEntriesByType('resource');
+        var entries = window.performance.getEntries();
         var urls = [];
         for (var i = 0; i < entries.length; i++) {
-            var entry = entries[i];
-            if (entry.name.endsWith('.ts')) {
-                urls.push(entry.name);
+            if (entries[i].name.endsWith('.ts')) {
+                urls.push(entries[i].name);
             }
         }
         return urls;
     """)
+
 
     if entries:
         return entries[0]
