@@ -36,7 +36,7 @@ async def download_ts(url, filepath, retries=114):
                     break  # 下载成功，退出循环
 
         except (aiohttp.ClientError, ValueError, TimeoutError) as e:
-            print(f"下载失败: {e}")
+            print(f"下载{Path(filepath).name}失败: {e}")
             attempt += 1
             if attempt >= retries:
                 print(f"下载 {Path(filepath).name} 失败，已尝试 {retries} 次。")
