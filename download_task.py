@@ -46,5 +46,4 @@ async def download_ts(url, filepath, retries=3):
 if __name__ == "__main__":
     url = sys.argv[1]
     filepath = sys.argv[2]
-    
     asyncio.run(download_ts(url, filepath))
