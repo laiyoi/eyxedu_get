@@ -90,4 +90,3 @@ def write_playlist_file(title, ts_url):
             f.write("#EXTM3U8\n")
     with open(f"playlist.m3u8", "a", encoding="utf-8") as f:
         f.write(f"#EXTINF:-1,{title}\n{ts_url}\n")
-    
