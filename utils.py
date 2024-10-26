@@ -83,3 +83,11 @@ def find_ts_url(driver)-> str:
     if entries:
         return entries[0]
     return None
+
+def write_playlist_file(title, ts_url):
+    if not os.path.exists("playlist.m3u8"):
+        with open("playlist.m3u8", "w", encoding="utf-8") as f:
+            f.write("#EXTM3U8\n")
+    with open(f"playlist.m3u8", "a", encoding="utf-8") as f:
+        f.write(f"#EXTINF:-1,{title}\n{ts_url}\n")
+    

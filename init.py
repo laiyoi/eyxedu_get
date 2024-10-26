@@ -8,15 +8,26 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from utils import get_pages, get_review_list, wait_for_content_load_in_menu, turn_page, clean_filename, start_download_process, find_ts_url
+from utils import get_pages, get_review_list, wait_for_content_load_in_menu, turn_page, clean_filename, start_download_process, find_ts_url, write_playlist_file
+import argparse
 
-save_path = Path("G:/网课")
+parser = argparse.ArgumentParser(description='下载亿云校视频或保存为m3u8播放列表.')
+
+parser.add_argument('-l', "--listmode", action='store_true', default=False, help="启用播放列表模式")
+parser.add_argument('-p', "--save_path", type=str, default='G:/网课',help="视频保存位置")
+parser.add_argument('-s', "--subjects", type=str, default='',help="指定科目,使用'_'分割")
+parser.add_argument('-k', "--keywords", type=str, default='',help="指定停止关键词,使用'_'分割")
+
+args = parser.parse_args()
+save_path = Path(args.save_path)
+STOP_KEYWORDS = args.keywords.split("_")
+SUBJECTS = args.subjects.split("_")
+PLAYLIST = args.listmode
+print(f"subjects: {SUBJECTS}\nkeywords: {STOP_KEYWORDS}\nlistmode: {PLAYLIST}\nsave_path: {save_path}")
+
 url = "https://apppc.eyxedu.com/course-review"
 with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
-
-# 特定字符检查
-STOP_KEYWORDS = ['冲量的计算']
 
 def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
@@ -38,15 +49,17 @@ def handle_page(driver, page, stop_event, processes):
         turn_page(driver, page)
         wait_for_content_load_in_menu(driver)
         cards = get_review_list(driver)
+        title = clean_filename(''.join(cards[i].text.split("\n")))
         # 检查标题是否包含停止关键词
-        if any(keyword in cards[i].text for keyword in STOP_KEYWORDS):
+        if any(keyword in cards[i].text and keyword !='' for keyword in STOP_KEYWORDS):
             print(f"Title contains stop keyword: {title}")
             stop_event.set()  # 设置停止标志
             break
-        title = clean_filename(''.join(cards[i].text.split("\n")))
+        if any(subject in cards[i].text and subject != '' for subject in SUBJECTS):
+            continue
         filename = f"{title}.ts"
         filepath = save_path / filename
-        if os.path.exists(filepath):
+        if os.path.exists(filepath) and not PLAYLIST:
             print(f"File {filename} already exists.")
             continue
         cards = get_review_list(driver)
@@ -65,13 +78,16 @@ def handle_page(driver, page, stop_event, processes):
         if not ts_url.endswith(".ts"):
             filename = f"{title}.{ts_url.split('.')[-1]}"
             filepath = save_path / filename
-        if os.path.exists(filepath):
+        if os.path.exists(filepath) and not PLAYLIST:
             print(f"File {filename} already exists.")
             driver.back()
             continue
-        # 启动子进程执行下载任务
-        process = start_download_process(ts_url, filepath)
-        processes.append(process)
+        if not PLAYLIST:
+            # 启动子进程执行下载任务
+            process = start_download_process(ts_url, filepath)
+            processes.append(process)
+        else:
+            write_playlist_file(title, ts_url)
 
         driver.back()
         wait_for_content_load_in_menu(driver)
