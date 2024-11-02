@@ -57,6 +57,10 @@ def handle_page(driver, page, stop_event, processes):
             break
         if any(subject in cards[i].text and subject != '' for subject in SUBJECTS):
             continue
+        if PLAYLIST :
+            with open("playlist.m3u8", "r", encoding="utf-8") as f:
+                playlist = f.read()
+            if title in playlist: continue
         filename = f"{title}.ts"
         filepath = save_path / filename
         if os.path.exists(filepath) and not PLAYLIST:
