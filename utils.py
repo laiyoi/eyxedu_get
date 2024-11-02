@@ -84,9 +84,29 @@ def find_ts_url(driver)-> str:
         return entries[0]
     return None
 
+def sort_playlist_file(text: list):
+    if not text: return []
+    #将标题与url绑定之后按照标题中的日期排序
+    playlist = {}
+    for line in text:
+        if line.startswith('#EXTINF'):
+            title = line.split(',', 1)[1].strip()
+            if title in playlist.keys(): continue
+            playlist[title] = None
+        elif line.startswith('http'):
+            if line in playlist.values(): continue
+            playlist[list(playlist.keys())[-1]] = line
+    sorted_playlist = sorted(playlist.items(), key=lambda x: x[0], reverse=True)
+    return ['#EXTM3U8\n'] + ['#EXTINF:-1,' + title + '\n' + url for title, url in sorted_playlist]
+
 def write_playlist_file(title, ts_url):
     if not os.path.exists("playlist.m3u8"):
         with open("playlist.m3u8", "w", encoding="utf-8") as f:
             f.write("#EXTM3U8\n")
-    with open(f"playlist.m3u8", "a", encoding="utf-8") as f:
-        f.write(f"#EXTINF:-1,{title}\n{ts_url}\n")
+    with open(f"playlist.m3u8", "r", encoding="utf-8") as f:
+        text = f.readlines()
+    text.append(f'#EXTINF:-1,{title}\n')
+    text.append(f'{ts_url}\n')
+    text = sort_playlist_file(text)
+    with open(f"playlist.m3u8", "w", encoding="utf-8") as f:
+        f.writelines(text)
