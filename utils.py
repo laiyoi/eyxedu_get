@@ -97,7 +97,7 @@ def sort_playlist_file(text: list):
             if line in playlist.values(): continue
             playlist[list(playlist.keys())[-1]] = line
     sorted_playlist = sorted(playlist.items(), key=lambda x: x[0], reverse=True)
-    return ['#EXTM3U8\n'] + ['#EXTINF:-1,' + title + '\n' + url for title, url in sorted_playlist]
+    return ['#EXTM3U8\n'] + ['#EXTINF:-1,' + title + '\n' + str(url) for title, url in sorted_playlist]
 
 def write_playlist_file(title, ts_url):
     if not os.path.exists("playlist.m3u8"):
