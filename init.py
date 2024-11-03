@@ -70,7 +70,7 @@ def handle_page(driver, page, stop_event, processes):
         cards[i].click()
 
         # 等待点击后的内容加载
-        WebDriverWait(driver, 10).until(
+        WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CLASS_NAME, "video-wrap"))
         )
 
