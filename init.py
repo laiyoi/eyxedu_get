@@ -29,6 +29,9 @@ url = "https://apppc.eyxedu.com/course-review"
 with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
 
+if not os.path.exists("playlist.m3u8"):
+    with open("playlist.m3u8", "w", encoding="utf-8") as f:
+        f.write("#EXTM3U8\n")
 with open("playlist.m3u8", "r", encoding="utf-8") as f:
     playlist = f.read()
 
@@ -52,6 +55,7 @@ def handle_page(driver, page, stop_event, processes):
         if get_page(driver) != page:
             turn_page(driver, page)
             wait_for_content_load_in_menu(driver)
+            cards = get_review_list(driver)
         title = clean_filename(''.join(cards[i].text.split("\n")))
         # 检查标题是否包含停止关键词
         if any(keyword in cards[i].text and keyword !='' for keyword in STOP_KEYWORDS):
@@ -121,7 +125,7 @@ def main(driver, page_num):
 
 if __name__ == "__main__":
     options = webdriver.EdgeOptions()
-    options.add_argument('--headless')
+    #options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
