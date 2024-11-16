@@ -70,7 +70,6 @@ def handle_page(driver, page, stop_event, processes):
         if os.path.exists(filepath) and not PLAYLIST:
             print(f"File {filename} already exists.")
             continue
-        cards = get_review_list(driver)
         cards[i].click()
 
         # 等待点击后的内容加载
@@ -99,6 +98,7 @@ def handle_page(driver, page, stop_event, processes):
 
         driver.back()
         wait_for_content_load_in_menu(driver)
+        cards = get_review_list(driver)
 
 def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
