@@ -120,7 +120,14 @@ def main(driver, page_num):
         process.wait()  # 等待每个子进程完成
 
 if __name__ == "__main__":
-    driver = webdriver.Edge()
+    options = webdriver.EdgeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--remote-debugging-port=9222')
+    options.add_argument('--single-process')
+    driver = webdriver.Edge(options=options)
     driver.get(url)
 
     # 添加 cookies
