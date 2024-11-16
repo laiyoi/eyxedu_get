@@ -17,12 +17,14 @@ parser.add_argument('-l', "--listmode", action='store_true', default=False, help
 parser.add_argument('-p', "--save_path", type=str, default='G:/网课',help="视频保存位置")
 parser.add_argument('-s', "--subjects", type=str, default='',help="指定科目,使用'_'分割")
 parser.add_argument('-k', "--keywords", type=str, default='',help="指定停止关键词,使用'_'分割")
+parser.add_argument('-hl', "--headless", action='store_true', default=False, help="启用无头模式")
 
 args = parser.parse_args()
 save_path = Path(args.save_path)
 STOP_KEYWORDS = args.keywords.split("_")
 SUBJECTS = args.subjects.split("_")
 PLAYLIST = args.listmode
+HEADLESS = args.headless
 print(f"subjects: {SUBJECTS}\nkeywords: {STOP_KEYWORDS}\nlistmode: {PLAYLIST}\nsave_path: {save_path}")
 
 url = "https://apppc.eyxedu.com/course-review"
@@ -125,7 +127,8 @@ def main(driver, page_num):
 
 if __name__ == "__main__":
     options = webdriver.EdgeOptions()
-    #options.add_argument('--headless')
+    if HEADLESS:
+        options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
