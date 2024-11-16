@@ -45,7 +45,7 @@ jobs:
         run: |
           $cookies = '${{ secrets.COOKIES }}'  # 获取 Secret 内容，注意使用单引号避免解析错误
           Set-Content -Path "cookies.json" -Value $cookies
-          python init.py -l
+          python init.py -l -hl
 
       - name: Commit and push changes
         run: |
