@@ -63,7 +63,7 @@ def start_download_process(url, filepath):
 def find_ts_url(driver)-> str:
     # 确保页面和资源加载完成
     driver.refresh()
-    time.sleep(2)  # 根据需要调整等待时间
+    time.sleep(1.4)  # 根据需要调整等待时间
     WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CLASS_NAME, "video-wrap"))
     )
@@ -110,3 +110,6 @@ def write_playlist_file(title, ts_url):
     text = sort_playlist_file(text)
     with open(f"playlist.m3u8", "w", encoding="utf-8") as f:
         f.writelines(text)
+
+def get_page(driver):
+    return int(driver.find_element(By.CLASS_NAME, "el-pager").find_element(By.CLASS_NAME, "number.active").text)

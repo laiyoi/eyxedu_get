@@ -8,7 +8,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from utils import get_pages, get_review_list, wait_for_content_load_in_menu, turn_page, clean_filename, start_download_process, find_ts_url, write_playlist_file
+from utils import get_pages, get_review_list, wait_for_content_load_in_menu, turn_page, clean_filename, start_download_process, find_ts_url, write_playlist_file, get_page
 import argparse
 
 parser = argparse.ArgumentParser(description='下载亿云校视频或保存为m3u8播放列表.')
@@ -29,14 +29,17 @@ url = "https://apppc.eyxedu.com/course-review"
 with open("cookies.json", "r", encoding="utf-8") as f:
     cookies = json.load(f)
 
+with open("playlist.m3u8", "r", encoding="utf-8") as f:
+    playlist = f.read()
+
 def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
-    
-    for i in range(len(get_review_list(driver))):
+    cards = get_review_list(driver)
+    for i in range(len(cards)):
         if stop_event.is_set():
             print("Stopping due to keyword match.")
             break
-        
+
         # 检查子进程数量
         while len(processes) >= 3:
             print("Too many processes. Waiting...")
@@ -45,10 +48,10 @@ def handle_page(driver, page, stop_event, processes):
             processes[:] = [p for p in processes if p.poll() is None]
             driver.refresh()
             wait_for_content_load_in_menu(driver)
-        
-        turn_page(driver, page)
-        wait_for_content_load_in_menu(driver)
-        cards = get_review_list(driver)
+
+        if get_page(driver) != page:
+            turn_page(driver, page)
+            wait_for_content_load_in_menu(driver)
         title = clean_filename(''.join(cards[i].text.split("\n")))
         # 检查标题是否包含停止关键词
         if any(keyword in cards[i].text and keyword !='' for keyword in STOP_KEYWORDS):
@@ -57,10 +60,7 @@ def handle_page(driver, page, stop_event, processes):
             break
         if any(subject in cards[i].text and subject != '' for subject in SUBJECTS):
             continue
-        if PLAYLIST :
-            with open("playlist.m3u8", "r", encoding="utf-8") as f:
-                playlist = f.read()
-            if title in playlist: continue
+        if PLAYLIST and title in playlist: continue
         filename = f"{title}.ts"
         filepath = save_path / filename
         if os.path.exists(filepath) and not PLAYLIST:
@@ -100,6 +100,7 @@ def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
     processes = []  # 用于跟踪子进程
     for page in range(1, page_num + 1):
+        time1 = time.time()
         turn_page(driver, page)
         wait_for_content_load_in_menu(driver)
         if stop_event.is_set():
@@ -107,6 +108,7 @@ def main(driver, page_num):
             break
         try:
             handle_page(driver, page, stop_event, processes)
+            print(f"Page {page} processed in {time.time() - time1:.2f} seconds.")
         except TimeoutException:
             print(f"Timeout occurred on page {page}.")
             page = page - 1
