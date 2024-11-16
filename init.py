@@ -25,7 +25,7 @@ STOP_KEYWORDS = args.keywords.split("_")
 SUBJECTS = args.subjects.split("_")
 PLAYLIST = args.listmode
 HEADLESS = args.headless
-print(f"subjects: {SUBJECTS}\nkeywords: {STOP_KEYWORDS}\nlistmode: {PLAYLIST}\nsave_path: {save_path}")
+print(f"subjects: {SUBJECTS}\nkeywords: {STOP_KEYWORDS}\nlistmode: {PLAYLIST}\nsave_path: {save_path}\nheadless: {HEADLESS}")
 
 url = "https://apppc.eyxedu.com/course-review"
 with open("cookies.json", "r", encoding="utf-8") as f:
