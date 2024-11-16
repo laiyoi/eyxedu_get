@@ -19,6 +19,7 @@ on:
         default: ''
 
 env:
+  COOKIES: ${{ secrets.COOKIES }}
   TZ: Asia/Shanghai
 
 jobs:
@@ -38,7 +39,7 @@ jobs:
 
       - name: Update playlist
         run: |
-          echo ${{ secrets.COOKIES }} > cookies.json
+          echo "$COOKIES" > cookies.json
           python init.py -l
 
       - name: Commit and push changes
