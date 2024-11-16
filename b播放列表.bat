@@ -1,1 +1,1 @@
-.\venv\Scripts\python.exe init.py -l
+.\venv\Scripts\python.exe init.py -l -hl
