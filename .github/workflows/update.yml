@@ -47,7 +47,7 @@ jobs:
       - name: Update playlist
         run: |
           echo "$COOKIES" > cookies.json
-          python init.py -l
+          python init.py -l -hl
 
       - name: Commit and push changes
         run: |
