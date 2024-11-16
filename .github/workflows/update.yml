@@ -24,30 +24,27 @@ env:
 
 jobs:
   clone-repo:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@main  # 克隆当前仓库
         with:
             ref: 'action-update'
 
-      - name: Initialize Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
         run: |
-          sudo -E apt-get update
-          sudo -E apt-get install -y python3 python3-pip
-          sudo apt-get install -y wget curl unzip
-          sudo apt-get install -y libx11-xcb1 libgdk-pixbuf2.0-0 libatk-bridge2.0-0 libgtk-3-0
-          sudo apt-get install -y fonts-liberation
-          sudo apt-get install -y libappindicator3-1 libasound2
-          sudo apt-get install -y libxss1 libnss3
-          sudo apt-get install -y libgbm-dev
-          pip3 install -r requirements.txt
-          pip3 install webdriver-manager
+          pip install selenium webdriver-manager
 
       - name: Update playlist
         run: |
-          echo "$COOKIES" > cookies.json
-          python init.py -l -hl
+          $cookies = '${{ secrets.COOKIES }}'  # 获取 Secret 内容，注意使用单引号避免解析错误
+          Set-Content -Path "cookies.json" -Value $cookies
+          python init.py -l
 
       - name: Commit and push changes
         run: |
