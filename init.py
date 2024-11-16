@@ -60,11 +60,11 @@ def handle_page(driver, page, stop_event, processes):
             cards = get_review_list(driver)
         title = clean_filename(''.join(cards[i].text.split("\n")))
         # 检查标题是否包含停止关键词
-        if any(keyword in cards[i].text and keyword !='' for keyword in STOP_KEYWORDS):
+        if any(keyword in title and keyword !='' for keyword in STOP_KEYWORDS):
             print(f"Title contains stop keyword: {title}")
             stop_event.set()  # 设置停止标志
             break
-        if any(subject in cards[i].text and subject != '' for subject in SUBJECTS):
+        if any(subject in title and subject != '' for subject in SUBJECTS):
             continue
         if PLAYLIST and title in playlist: continue
         filename = f"{title}.ts"
