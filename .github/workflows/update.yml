@@ -21,6 +21,7 @@ on:
 env:
   COOKIES: ${{ secrets.COOKIES }}
   TZ: Asia/Shanghai
+  PYTHONIOENCODING: utf-8
 
 jobs:
   clone-repo:
