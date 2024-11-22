@@ -59,6 +59,7 @@ def handle_page(driver, page, stop_event, processes):
             wait_for_content_load_in_menu(driver)
             cards = get_review_list(driver)
         
+        cards = get_review_list(driver)
         title = clean_filename(''.join(cards[i].text.split("\n")))
         # 检查标题是否包含停止关键词
         if any(keyword in title and keyword !='' for keyword in STOP_KEYWORDS):
