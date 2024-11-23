@@ -20,13 +20,13 @@ def get_review_list(driver):
     return review_list.find_elements(By.CLASS_NAME, "el-card.pointer.is-always-shadow")
 
 def wait_for_content_load_in_menu(driver):
-    WebDriverWait(driver, 20).until(
+    WebDriverWait(driver, 40).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
     )
-    time.sleep(0.2)
+    time.sleep(0.05)
 
 def turn_page(driver, page):
-    page_box = WebDriverWait(driver, 20).until(
+    page_box = WebDriverWait(driver, 40).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-pagination__editor"))
     )
     numbox = page_box.find_element(By.TAG_NAME, "input")
