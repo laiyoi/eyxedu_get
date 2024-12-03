@@ -13,7 +13,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='下载亿云校视频或保存为m3u8播放列表.')
 
-parser.add_argument('-l', "--listmode", action='store_true', default=False, help="启用播放列表模式")
+parser.add_argument('-l', "--listmode", action='store_true', default=True, help="启用播放列表模式")
 parser.add_argument('-p', "--save_path", type=str, default='G:/网课',help="视频保存位置")
 parser.add_argument('-s', "--subjects", type=str, default='',help="指定科目,使用'_'分割")
 parser.add_argument('-k', "--keywords", type=str, default='',help="指定停止关键词,使用'_'分割")
@@ -131,10 +131,10 @@ if __name__ == "__main__":
     options = webdriver.EdgeOptions()
     if HEADLESS:
         options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
+    #options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
-    options.add_argument('--remote-debugging-port=9222')
+    #options.add_argument('--remote-debugging-port=9222')
     options.add_argument('--single-process')
     driver = webdriver.Edge(options=options)
     driver.get(url)
