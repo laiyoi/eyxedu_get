@@ -1,1 +1,1 @@
-.\venv\Scripts\python.exe init.py -l -hl
+powershell C:\Users\Hisense\Downloads\eyxedu_get\venv\Scripts\python.exe C:\Users\Hisense\Downloads\eyxedu_get-main\init.py -l
