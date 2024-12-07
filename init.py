@@ -39,8 +39,7 @@ with open("playlist.m3u8", "r", encoding="utf-8") as f:
 
 def handle_page(driver, page, stop_event, processes):
     """处理每个页面的下载操作"""
-    cards = get_review_list(driver)
-    for i in range(len(cards)):
+    for i in range(len(get_review_list(driver))):
         if stop_event.is_set():
             print("Stopping due to keyword match.")
             break
@@ -57,9 +56,8 @@ def handle_page(driver, page, stop_event, processes):
         if get_page(driver) != page:
             turn_page(driver, page)
             wait_for_content_load_in_menu(driver)
-            cards = get_review_list(driver)
         
-        title = clean_filename(''.join(cards[i].text.split("\n")))
+        title = clean_filename(''.join(get_review_list(driver)[i].text.split("\n")))
         # 检查标题是否包含停止关键词
         if any(keyword in title and keyword !='' for keyword in STOP_KEYWORDS):
             print(f"Title contains stop keyword: {title}")
@@ -73,7 +71,8 @@ def handle_page(driver, page, stop_event, processes):
         if os.path.exists(filepath) and not PLAYLIST:
             print(f"File {filename} already exists.")
             continue
-        cards[i].click()
+        card = get_review_list(driver)[i]
+        card.click()
 
         # 等待点击后的内容加载
         WebDriverWait(driver, 40).until(
@@ -101,7 +100,6 @@ def handle_page(driver, page, stop_event, processes):
 
         driver.back()
         wait_for_content_load_in_menu(driver)
-        cards = get_review_list(driver)
 
 def main(driver, page_num):
     stop_event = threading.Event()  # 用于控制停止
@@ -130,11 +128,6 @@ if __name__ == "__main__":
     options = webdriver.EdgeOptions()
     if HEADLESS:
         options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--remote-debugging-port=9222')
-    options.add_argument('--single-process')
     driver = webdriver.Edge(options=options)
     driver.get(url)
 

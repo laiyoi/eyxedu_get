@@ -6,6 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
@@ -15,15 +16,22 @@ def get_pages(driver):
     return int(pager.text[6:])
 
 def get_review_list(driver):
-    wait_for_content_load_in_menu(driver)
-    review_list = driver.find_element(By.CLASS_NAME, "review-list")
-    return review_list.find_elements(By.CLASS_NAME, "el-card.pointer.is-always-shadow")
-
-def wait_for_content_load_in_menu(driver):
     WebDriverWait(driver, 40).until(
         EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
     )
-    time.sleep(0.05)
+    review_list = driver.find_element(By.CLASS_NAME, "review-list")
+    cards = review_list.find_elements(By.CLASS_NAME, "el-card.pointer.is-always-shadow")
+    try:
+        cards[0].location
+    except StaleElementReferenceException:
+        cards = get_review_list(driver)
+    return cards
+
+def wait_for_content_load_in_menu(driver):
+    WebDriverWait(driver, 40).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "el-pager"))
+    )
+    #time.sleep(0.05)
 
 def turn_page(driver, page):
     page_box = WebDriverWait(driver, 40).until(
