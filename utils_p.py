@@ -2,49 +2,35 @@
 
 import os
 import re
-import subprocess
+import threading
 import time
 from pathlib import Path
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import StaleElementReferenceException
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
+from playwright.sync_api import sync_playwright
 
-def get_pages(driver):
-    pager = driver.find_element(By.CLASS_NAME, "el-pager")
-    return int(pager.text[6:])
+def get_pages(page):
+    pager = page.query_selector(".el-pager")
+    return int(pager.text_content()[6:])
 
-def get_review_list(driver, i:int , type:str):
-    WebDriverWait(driver, 40).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "el-loading-mask"))
-    )
-    review_list = driver.find_element(By.CLASS_NAME, "review-list")
-    cards = review_list.find_elements(By.CLASS_NAME, "el-card.pointer.is-always-shadow")
+def get_review_list(page):
+    page.wait_for_selector(".el-loading-mask", timeout=40000)
+    review_list = page.query_selector(".review-list")
+    cards = review_list.query_selector_all(".el-card.pointer.is-always-shadow")
     try:
-        cards[0].location
-    except StaleElementReferenceException:
-        cards = get_review_list(driver)
-    if type == "str": return cards[i].text
-    if type == 'click': cards[i].click()
-    if type == 'len': return len(cards)
+        cards[0].bounding_box()
+    except Exception:
+        cards = get_review_list(page)
+    return cards
 
-
-def wait_for_content_load_in_menu(driver):
-    WebDriverWait(driver, 40).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "el-pager"))
-    )
+def wait_for_content_load_in_menu(page):
+    page.wait_for_selector(".el-pager", timeout=40000)
     #time.sleep(0.05)
 
-def turn_page(driver, page):
-    page_box = WebDriverWait(driver, 40).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "el-pagination__editor"))
-    )
-    numbox = page_box.find_element(By.TAG_NAME, "input")
-    numbox.clear()
-    numbox.clear()
-    numbox.send_keys(str(page))
-    numbox.send_keys(Keys.RETURN)
+def turn_page(page, page_num):
+    page_box = page.wait_for_selector(".el-pagination__editor", timeout=40000)
+    numbox = page_box.query_selector("input")
+    numbox.fill("")
+    numbox.fill(str(page_num))
+    numbox.press("Enter")
 
 def clean_filename(filename):
     # 匹配第一个冒号后的内容和日期时间
@@ -62,24 +48,13 @@ def clean_filename(filename):
         filename = filename
     return filename.replace(":", "-").replace("/", "-").replace("\\", "-").replace("?", "").replace("\"", "").replace("<", "").replace(">", "").replace("|", "")
 
-def start_download_process(url, filepath):
-    """启动新的终端执行下载任务"""
-    python_exe = r'venv\Scripts\python.exe'  # 相对路径
-    script_path = r'download_task.py'  # 相对路径
-    command = [
-        'cmd', '/c', python_exe, script_path, url, str(filepath)
-    ]
-    return subprocess.Popen(command, shell=True)  # 返回子进程对象
-
-def find_ts_url(driver)-> str:
+def find_ts_url(page)-> str:
     # 确保页面和资源加载完成
-    driver.refresh()
-    time.sleep(1.4)  # 根据需要调整等待时间
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "video-wrap"))
-    )
+    page.reload()
+    time.sleep(0.4)  # 根据需要调整等待时间
+    page.wait_for_selector(".video-wrap", timeout=10000)
 
-    entries = driver.execute_script("""
+    entries = page.evaluate("""
         var entries = window.performance.getEntries();
         var urls = [];
         for (var i = 0; i < entries.length; i++) {
@@ -89,7 +64,6 @@ def find_ts_url(driver)-> str:
         }
         return urls;
     """)
-
 
     if entries:
         return entries[0]
@@ -122,5 +96,5 @@ def write_playlist_file(title, ts_url):
     with open(f"playlist.m3u8", "w", encoding="utf-8") as f:
         f.writelines(text)
 
-def get_page(driver):
-    return int(driver.find_element(By.CLASS_NAME, "el-pager").find_element(By.CLASS_NAME, "number.active").text)
+def get_page(page):
+    return int(page.query_selector(".el-pager .number.active").text_content())
