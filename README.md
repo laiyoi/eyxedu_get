@@ -5,27 +5,15 @@
 看见牢周录屏27分钟所以做了一个批量下载器
 # requirements
 - python3.11.3
-- selenium
+- requests
 # 使用方法
 - 使用`editthiscookie`插件复制网页cookie后创建`cookies.json`，粘贴进去
-- 运行init.py
-  ```
-  options:
-  -h, --help            show this help message and exit
-  -l, --listmode        启用播放列表模式
-  -p SAVE_PATH, --save_path SAVE_PATH
-                        视频保存位置
-  -s SUBJECTS, --subjects SUBJECTS
-                        指定科目,使用'_'分割
-  -k KEYWORDS, --keywords KEYWORDS
-                        指定停止关键词,使用'_'分割
-  ```
-# 已知问题
-不可最小化弹出的浏览器窗口
+- 运行main.py
+
 # TODO List
 - [x] 按页遍历
-- [x] 下载
-- [x] 分科目下载
+- [ ] 下载
+- [ ] 分科目下载
 - [x] 下载`.m3u8`播放列表
 - [x] 播放列表自动排序
 - [ ] 分时间下载
