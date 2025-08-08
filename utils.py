@@ -26,45 +26,53 @@ class EyxeduSession(requests.Session):
         super().__init__()
         self.headers.update(init_headers())
         self.stuck = False
+        try:
+            with open("playlist.m3u8", "r", encoding="utf-8") as f:
+                self.existing_titles = {line.strip().split(',')[1] for line in f if line.strip() and line.startswith("#EXTINF")}
+        except FileNotFoundError:
+            self.existing_titles = set()
 
     def get_lessons(self, page):
         url = "https://apppc.eyxedu.com/prod-api/bsyx/api/historySchedule"
         data = {"page": page, "limit": 12}
-        resp = self.post(url, data=data, headers=self.headers)
+        resp = self.post(url, data=data)
         return resp.json()['data']
     
     def get_ts_url(self, course_id):
         url = f"https://apppc.eyxedu.com/prod-api/bsyx/api/lookBack"
         data = {"courseId": course_id}
-        resp = self.post(url, data=data, headers=self.headers)
+        resp = self.post(url, data=data)
         res_json = resp.json()
         return res_json['data']["videoUrl"] if res_json['code'] != 500 else None
 
     def total_pages(self):
         url = "https://apppc.eyxedu.com/prod-api/bsyx/api/historySchedule"
         data = {"page": 1, "limit": 12}
-        resp = self.post(url, data=data, headers=self.headers)
+        resp = self.post(url, data=data)
         return int(resp.json()['total']) // 12 + 1
     
-    def deal_pages(self):
-        for page in range(1, self.total_pages()):
-            lessons = self.get_lessons(page)
-            for lesson in lessons:
-                title = retitle(lesson)
+    def deal_page(self, page):
+        lessons = self.get_lessons(page)
+        for lesson in lessons:
+            title = retitle(lesson)
 
-                # 重试机制在这里
-                while True:
-                    ts_url = self.get_ts_url(lesson["courseId"])
-                    if ts_url:
-                        self.stuck = False
-                        ts_url = ts_url.rstrip('m3u8') + 'ts'
-                        yield title, ts_url, self.stuck
-                        break
-                    else:
-                        self.stuck = True
-                        print(f"请求过于频繁，等待中...（课程: {title}）")
-                        yield title, None, self.stuck  # 告诉外部现在卡住了，ts_url没拿到
-                        time.sleep(5)
+            # 如果标题已存在，就跳过，不请求接口
+            if title in self.existing_titles:
+                print(f"已存在，跳过：{title}")
+                continue
+            # 重试机制在这里
+            while True:
+                ts_url = self.get_ts_url(lesson["courseId"])
+                if ts_url:
+                    self.stuck = False
+                    ts_url = ts_url.rstrip('m3u8') + 'ts'
+                    yield title, ts_url, self.stuck
+                    break
+                else:
+                    self.stuck = True
+                    print(f"请求过于频繁，等待中...（课程: {title}）")
+                    yield title, None, self.stuck  # 告诉外部现在卡住了，ts_url没拿到
+                    time.sleep(5)
 
 def parse_date(title):
     # 找出日期时间部分，格式类似 "2025.06.17 09-02-09-50"
