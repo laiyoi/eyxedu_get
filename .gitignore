@@ -6,3 +6,4 @@ index*.html
 playlist.m3u8
 .vscode/
 uv.lock
+*.env

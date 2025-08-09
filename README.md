@@ -6,15 +6,21 @@
 # requirements
 - python3.11.3
 - requests
+- python-dotenv
 # 使用方法
-- 使用`editthiscookie`插件复制网页cookie后创建`cookies.json`，粘贴进去
+- 创建`.env`文件，内容为如下登录手机号和密码
+```
+PHONE_NUMBER=123456789
+PASSWORD=114514
+```
 - 运行main.py
 
 # TODO List
 - [x] 按页遍历
+- [x] 账号密码登录
 - [ ] 下载
 - [ ] 分科目下载
 - [x] 下载`.m3u8`播放列表
 - [x] 播放列表自动排序
 - [ ] 分时间下载
-- [ ] 跳过播放列表中已有的课程
+- [x] 跳过播放列表中已有的课程
