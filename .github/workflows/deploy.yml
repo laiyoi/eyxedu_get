@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  schedule:
+    - cron: '0 10 * * 6'  # 北京时间每周六18点 (UTC+8)
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout v2 branch (default branch)
+        uses: actions/checkout@v4
+        with:
+          ref: v2  # 明确指定v2分支，确保一致性
+
+      - name: Create .env file
+        run: |
+          # 从GitHub Secrets加载环境变量
+          echo "PHONE_NUMBER=${{ secrets.PHONE_NUMBER }}" >> .env
+          echo "PASSWORD=${{ secrets.PASSWORD }}" >> .env
+          # 添加更多环境变量...
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        run: pip install uv && uv sync
+
+      - name: Run uv run main.py
+        run: uv run main.py
+
+      - name: Switch to gh-pages branch
+        run: |
+          git fetch origin gh-pages
+          git checkout gh-pages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci && cp lesson.json public/lesson.json
+
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          cname: # 可选：如果有自定义域名，在此添加
+          allow_empty_commit: false
+          keep_files: false
+          force_orphan: true
