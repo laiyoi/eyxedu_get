@@ -3,19 +3,6 @@ import requests
 import json, time, os
 from dotenv import load_dotenv
 
-def format_timestamp_range(start_ts: int, end_ts: int) -> str:
-    start_dt = datetime.fromtimestamp(start_ts)
-    end_dt = datetime.fromtimestamp(end_ts)
-    return start_dt.strftime("%Y.%m.%d %H-%M") + "-" + end_dt.strftime("%H-%M")
-
-def retitle(lesson):
-        title = lesson["courseTitle"]
-        time = format_timestamp_range(lesson["startTime"], lesson["endTime"])
-        return f"{time} {title}"
-
-
-
-
 class EyxeduSession(requests.Session):
     
     def __init__(self):
@@ -23,6 +10,8 @@ class EyxeduSession(requests.Session):
         load_dotenv()
         self.phone = os.getenv("PHONE_NUMBER")
         self.password = os.getenv("PASSWORD")
+        self.skip = os.getenv("SKIP_LIST") == "true"
+
         self.headers.update(self.load_headers())
         try:
             with open("playlist.m3u8", "r", encoding="utf-8") as f:
@@ -82,7 +71,7 @@ class EyxeduSession(requests.Session):
             title = retitle(lesson)
 
             # 如果标题已存在，就跳过，不请求接口
-            if title in self.existing_titles:
+            if title in self.existing_titles and self.skip:
                 print(f"已存在，跳过：{title}")
                 continue
             # 重试机制在这里
@@ -107,6 +96,16 @@ def parse_date(title):
     year, month, day = map(int, date_str.split('.'))
     h1, m1, s1, s2 = map(int, time_str.split('-'))
     return (year, month, day, h1, m1, s1, s2)
+
+def format_timestamp_range(start_ts: int, end_ts: int) -> str:
+    start_dt = datetime.fromtimestamp(start_ts)
+    end_dt = datetime.fromtimestamp(end_ts)
+    return start_dt.strftime("%Y.%m.%d %H-%M") + "-" + end_dt.strftime("%H-%M")
+
+def retitle(lesson):
+        title = lesson["courseTitle"]
+        time = format_timestamp_range(lesson["startTime"], lesson["endTime"])
+        return f"{time} {title}"
 
 def sort_playlist_file(text):
     playlist = []
@@ -147,3 +146,21 @@ def write_playlist_file(lesson: list[tuple[str, str]]):
     
     with open(filename, "w", encoding="utf-8") as f:
         f.writelines(sorted_lines)
+
+def write_json(lesson: list[tuple[str, str]]):
+    if os.path.exists('lesson.json'):
+        with open("lesson.json", "r", encoding='utf-8') as f:
+            data = json.load(f)
+
+    for title, ts_url in lesson:
+        lesson = {
+            "time": ' '.join(title.split(' ')[:2]),
+
+            "title": title.split(' ')[2],
+            "url": ts_url
+        }
+        data.append(lesson)
+    with open("lesson.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+

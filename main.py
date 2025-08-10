@@ -1,5 +1,4 @@
-import os
-from utils import EyxeduSession, write_playlist_file
+from utils import EyxeduSession, write_playlist_file, write_json
 
 session = EyxeduSession()
 buffer = []
@@ -18,10 +17,12 @@ for page in range(1, pages):
             # 卡住时，把缓存的全部写入文件，然后清空缓存
             print(len(buffer), "个缓存的课程信息已写入文件")
             write_playlist_file(buffer)
+            write_json(buffer)
             buffer.clear()
             
 
 # 循环结束后，把剩余的缓存也写入文件
 write_playlist_file(buffer)
+write_json(buffer)
 buffer.clear()
 
