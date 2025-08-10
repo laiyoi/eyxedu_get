@@ -79,8 +79,8 @@ const formatVideoDate = (timeStr) => {
 <template>
   <div class="home-page">
     <header class="header">
-      <h1>视频导航网站</h1>
-      <p>发现优质视频内容</p>
+      <h1>亿云校索引</h1>
+      <p>关注永雏塔菲谢谢喵</p>
     </header>
 
     <div class="main-content">
