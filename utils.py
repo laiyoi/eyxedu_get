@@ -148,6 +148,7 @@ def write_playlist_file(lesson: list[tuple[str, str]]):
         f.writelines(sorted_lines)
 
 def write_json(lesson: list[tuple[str, str]]):
+    data = []
     if os.path.exists('lesson.json'):
         with open("lesson.json", "r", encoding='utf-8') as f:
             data = json.load(f)
