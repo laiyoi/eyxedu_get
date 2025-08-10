@@ -52,7 +52,7 @@ class EyxeduSession(requests.Session):
         resp = self.post(url, data=data)
         return resp.json()['data']
     
-    def get_ts_url(self, course_id):
+    def get_ts_url(self, course_id) -> str: 
         url = f"https://apppc.eyxedu.com/prod-api/bsyx/api/lookBack"
         data = {"courseId": course_id}
         resp = self.post(url, data=data)
@@ -78,7 +78,8 @@ class EyxeduSession(requests.Session):
             while True:
                 ts_url = self.get_ts_url(lesson["courseId"])
                 if ts_url:
-                    ts_url = ts_url.rstrip('m3u8') + 'ts'
+                    if ts_url.endswith('m3u8'):
+                        ts_url = ts_url.rstrip('m3u8') + 'ts'
                     yield title, ts_url, lesson["courseId"]
                     break
                 else:
