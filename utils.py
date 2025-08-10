@@ -79,11 +79,11 @@ class EyxeduSession(requests.Session):
                 ts_url = self.get_ts_url(lesson["courseId"])
                 if ts_url:
                     ts_url = ts_url.rstrip('m3u8') + 'ts'
-                    yield title, ts_url
+                    yield title, ts_url, lesson["courseId"]
                     break
                 else:
                     print(f"请求过于频繁，等待中...（课程: {title}）")
-                    yield title, None  # 告诉外部现在卡住了，ts_url没拿到
+                    yield title, None, lesson["courseId"] # 告诉外部现在卡住了，ts_url没拿到
                     time.sleep(5)
 
 def parse_date(title):
@@ -136,7 +136,7 @@ def write_playlist_file(lesson: list[tuple[str, str]]):
     with open(filename, "r", encoding="utf-8") as f:
         lines = f.readlines()
     
-    for title, ts_url in lesson:
+    for title, ts_url, _ in lesson:
         # 追加新的内容
         lines.append(f'#EXTINF:-1,{title}\n')
         lines.append(f'{ts_url}\n')
@@ -152,11 +152,11 @@ def write_json(lesson: list[tuple[str, str]]):
         with open("lesson.json", "r", encoding='utf-8') as f:
             data = json.load(f)
 
-    for title, ts_url in lesson:
+    for title, ts_url, id in lesson:
         lesson = {
-            "time": ' '.join(title.split(' ')[:2]),
-
             "title": title.split(' ')[2],
+            'id': id,
+            "time": ' '.join(title.split(' ')[:2]),
             "url": ts_url
         }
         data.append(lesson)

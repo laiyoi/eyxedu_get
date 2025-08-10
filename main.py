@@ -7,11 +7,11 @@ buffer = []
 session.access_check()
 pages = session.total_pages() + 1
 for page in range(1, pages):
-    for title, ts_url in session.deal_page(page):
+    for title, ts_url, id in session.deal_page(page):
         if ts_url:
             print(f"✅ 已获取：{title} → {ts_url}")
             # 不卡住时，先缓存
-            buffer.append((title, ts_url))
+            buffer.append((title, ts_url, id))
 
         else:
             # 卡住时，把缓存的全部写入文件，然后清空缓存
