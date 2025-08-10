@@ -45,7 +45,7 @@ onMounted(async () => {
     }
 
     // 加载lesson.json文件
-    const response = await fetch('/eyxedu_get/lesson.json')
+    const response = await fetch('lesson.json')
     if (!response.ok) {
       throw new Error('获取视频数据失败')
     }

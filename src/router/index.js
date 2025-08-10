@@ -16,7 +16,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/eyxedu_get/'),
+  history: createWebHistory(),
   routes
 })
 

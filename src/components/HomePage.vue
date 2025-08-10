@@ -17,7 +17,8 @@ const itemsPerPage = ref(18) // 每页显示18个视频 (6列x3行)
 // 加载视频数据
 onMounted(async () => {
   try {
-    const response = await fetch('/eyxedu_get/lesson.json')
+    // 使用相对路径请求lesson.json
+    const response = await fetch('lesson.json')
     if (!response.ok) {
       throw new Error('Network response was not ok')
     }
