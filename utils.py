@@ -57,7 +57,11 @@ class EyxeduSession(requests.Session):
         data = {"courseId": course_id}
         resp = self.post(url, data=data)
         res_json = resp.json()
-        return res_json['data']["videoUrl"] if res_json['code'] != 500 else None
+        if res_json['code'] == 403:
+            self.access_check()
+            self.get_ts_url(course_id)
+
+        return res_json['data']['videoUrl'] if res_json['code'] != 500 else None
 
     def total_pages(self):
         url = "https://apppc.eyxedu.com/prod-api/bsyx/api/historySchedule"
