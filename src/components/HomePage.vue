@@ -45,6 +45,48 @@ const totalPages = computed(() => {
   return Math.ceil(videos.value.length / itemsPerPage.value)
 })
 
+// 可见页码计算（只显示第一页、最后一页和当前页周围的几页）
+const visiblePages = computed(() => {
+  const pages = []
+  const surroundingPages = 2 // 当前页周围显示的页数
+
+  // 始终添加第一页
+  pages.push(1)
+
+  // 如果总页数小于等于5，直接显示所有页码
+  if (totalPages.value <= 5) {
+    for (let i = 2; i < totalPages.value; i++) {
+      pages.push(i)
+    }
+  } else {
+    // 显示当前页周围的页码
+    const startPage = Math.max(2, currentPage.value - surroundingPages)
+    const endPage = Math.min(totalPages.value - 1, currentPage.value + surroundingPages)
+
+    // 如果起始页大于2，添加省略号
+    if (startPage > 2) {
+      pages.push('...')
+    }
+
+    // 添加当前页周围的页码
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i)
+    }
+
+    // 如果结束页小于总页数-1，添加省略号
+    if (endPage < totalPages.value - 1) {
+      pages.push('...')
+    }
+  }
+
+  // 始终添加最后一页
+  if (totalPages.value > 1) {
+    pages.push(totalPages.value)
+  }
+
+  return pages
+})
+
 // 分页方法
 const nextPage = () => {
   if (currentPage.value < totalPages.value) {
@@ -126,7 +168,9 @@ const formatVideoDate = (timeStr) => {
       <div class="pagination-container" v-if="totalPages > 1">
         <div class="pagination">
           <button @click="prevPage" :disabled="currentPage === 1" class="pagination-btn">上一页</button>
-          <div v-for="page in totalPages" :key="page" class="pagination-item" :class="{ 'active': page === currentPage }" @click="goToPage(page)">{{ page }}</div>
+          <div v-for="page in visiblePages" :key="page" class="pagination-item" :class="{ 'active': page === currentPage }" @click="typeof page === 'number' ? goToPage(page) : null">
+            {{ page }}
+          </div>
           <button @click="nextPage" :disabled="currentPage === totalPages" class="pagination-btn">下一页</button>
         </div>
         <div class="pagination-info">当前第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</div>
@@ -231,12 +275,20 @@ const formatVideoDate = (timeStr) => {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .pagination {
   display: flex;
   align-items: center;
   gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  justify-content: center;
 }
 
 .pagination-btn {
