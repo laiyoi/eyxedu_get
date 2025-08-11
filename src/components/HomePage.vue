@@ -134,7 +134,7 @@ const formatVideoDate = (timeStr) => {
     </div>
 
     <footer class="footer">
-      <p>© {{ new Date().getFullYear() }} 视频导航网站</p>
+      <p>© {{ new Date().getFullYear() }} eyxedu</p>
     </footer>
   </div>
 </template>

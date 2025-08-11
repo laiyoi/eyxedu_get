@@ -177,7 +177,9 @@ const initHlsPlayer = () => {
 
     // 监听时间更新事件
     videoRef.value.addEventListener('timeupdate', () => {
-      currentTime.value = videoRef.value.currentTime
+      if (videoRef.value) {
+        currentTime.value = videoRef.value.currentTime
+      }
     })
 
     // 监听视频结束事件
