@@ -75,5 +75,3 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: github-pages
-          branch: web
-          cname: # 可选：如果有自定义域名，在此添加
