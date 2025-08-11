@@ -3,8 +3,20 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // 开发环境使用相对路径，便于直接打开index.html
-  // 部署到GitHub Pages时改为 '/eyxedu_get/'
-  base: './',
+  // 部署到GitHub Pages时使用仓库名称作为基础路径
+  base: '/eyxedu_get/',
   plugins: [vue()],
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js'
+      }
+    }
+  }
 })
