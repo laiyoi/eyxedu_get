@@ -33,9 +33,9 @@ jobs:
       - name: Install uv
         run: pip install uv && uv sync
 
-      - name: Run uv run main.py
+      - name: Get lessons
         run: |
-          chmod +x test.sh && ./test.sh
+          uv run main.py
 
       - name: Switch to gh-pages branch
         run: |
