@@ -45,36 +45,58 @@ const totalPages = computed(() => {
   return Math.ceil(videos.value.length / itemsPerPage.value)
 })
 
-// 可见页码计算（只显示第一页、最后一页和当前页周围的几页）
+// 可见页码计算（总长度恒为15）
 const visiblePages = computed(() => {
   const pages = []
-  const surroundingPages = 2 // 当前页周围显示的页数
+  const totalDisplayLength = 15
+  let availableNumberSlots = totalDisplayLength - 2 // 减去第一页和最后一页，剩下13个数字槽位
 
   // 始终添加第一页
   pages.push(1)
 
-  // 如果总页数小于等于5，直接显示所有页码
-  if (totalPages.value <= 5) {
+  // 如果总页数 <= totalDisplayLength，直接显示所有页码
+  if (totalPages.value <= totalDisplayLength) {
     for (let i = 2; i < totalPages.value; i++) {
       pages.push(i)
     }
   } else {
-    // 显示当前页周围的页码
-    const startPage = Math.max(2, currentPage.value - surroundingPages)
-    const endPage = Math.min(totalPages.value - 1, currentPage.value + surroundingPages)
+    // 计算当前页应该显示的范围
+    let startPage, endPage
+    let hasLeftEllipsis = false
+    let hasRightEllipsis = false
 
-    // 如果起始页大于2，添加省略号
-    if (startPage > 2) {
+    // 如果当前页靠近前面（前11页）
+    if (currentPage.value <= 11) {
+      startPage = 2
+      endPage = 12 // 显示1-12页，共12个数字页码
+      hasRightEllipsis = true
+    }
+    // 如果当前页靠近后面（后11页）
+    else if (currentPage.value >= totalPages.value - 10) {
+      startPage = totalPages.value - 11
+      endPage = totalPages.value - 1
+      hasLeftEllipsis = true
+    }
+    // 如果当前页在中间
+    else {
+      startPage = currentPage.value - 5 // 当前页前5页
+      endPage = currentPage.value + 5 // 当前页后5页
+      hasLeftEllipsis = true
+      hasRightEllipsis = true
+    }
+
+    // 添加左侧省略号
+    if (hasLeftEllipsis) {
       pages.push('...')
     }
 
-    // 添加当前页周围的页码
+    // 添加数字页码
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i)
     }
 
-    // 如果结束页小于总页数-1，添加省略号
-    if (endPage < totalPages.value - 1) {
+    // 添加右侧省略号
+    if (hasRightEllipsis) {
       pages.push('...')
     }
   }
@@ -82,6 +104,56 @@ const visiblePages = computed(() => {
   // 始终添加最后一页
   if (totalPages.value > 1) {
     pages.push(totalPages.value)
+  }
+
+  // 确保总长度为15（防止异常情况）
+  if (pages.length > totalDisplayLength) {
+    // 保留第一页、最后一页和中间的13个元素
+    const middlePart = pages.slice(1, -1)
+    pages.splice(1, pages.length - 2, ...middlePart.slice(0, 13))
+  } else if (pages.length < totalDisplayLength) {
+    // 如果不足15个，尝试在合适位置添加省略号
+    if (pages.indexOf('...') === -1 && pages.length > 2) {
+      // 在第二位置添加省略号
+      pages.splice(1, 0, '...')
+    }
+  }
+
+  // 确保总长度为16，如果不足则填充
+  while (pages.length < totalDisplayLength) {
+    // 尝试在合适位置插入省略号
+    if (pages.indexOf('...') === -1 && pages.length > 2) {
+      // 在第二位置添加省略号
+      pages.splice(1, 0, '...')
+    } else {
+      // 如果已有省略号或无法添加，则重复最后一个数字页码前的数字
+      const lastNumIndex = pages.findLastIndex(item => typeof item === 'number')
+      if (lastNumIndex > 0 && lastNumIndex < pages.length - 1) {
+        pages.splice(lastNumIndex, 0, pages[lastNumIndex] - 1)
+      } else {
+        break // 无法继续填充
+      }
+    }
+  }
+
+  // 如果超过16，则截断（理论上不应该发生）
+  if (pages.length > totalDisplayLength) {
+    // 保留第一页、最后一页和中间的14个元素
+    const middlePart = pages.slice(1, -1)
+    while (pages.length > totalDisplayLength) {
+      // 优先移除省略号
+      const ellipsisIndex = middlePart.indexOf('...')
+      if (ellipsisIndex !== -1) {
+        middlePart.splice(ellipsisIndex, 1)
+      } else if (middlePart.length > 0) {
+        // 如果没有省略号，则移除中间的页码
+        const removeIndex = Math.floor(middlePart.length / 2)
+        middlePart.splice(removeIndex, 1)
+      } else {
+        break
+      }
+    }
+    pages.splice(1, pages.length - 2, ...middlePart)
   }
 
   return pages

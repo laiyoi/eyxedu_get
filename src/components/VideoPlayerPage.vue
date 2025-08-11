@@ -175,23 +175,38 @@ const initHlsPlayer = () => {
       isPlaying.value = false
     })
 
-    // 监听时间更新事件
-    videoRef.value.addEventListener('timeupdate', () => {
-      currentTime.value = videoRef.value.currentTime
-    })
+    // 定义并存储事件处理函数
+    videoEventsRefs.value.handleTimeUpdate = function() {
+      if (videoRef.value) {
+        currentTime.value = videoRef.value.currentTime
+      }
+    }
 
-    // 监听视频结束事件
-    videoRef.value.addEventListener('ended', () => {
+    videoEventsRefs.value.handleEnded = function() {
       isPlaying.value = false
-    })
+    }
+
+    // 注册事件监听器
+    videoRef.value.addEventListener('timeupdate', videoEventsRefs.value.handleTimeUpdate)
+    videoRef.value.addEventListener('ended', videoEventsRefs.value.handleEnded)
 
     // 初始化音量
     videoRef.value.volume = volume.value
   })
 }
 
-// 组件卸载时清理HLS播放器
+// 创建引用存储事件处理函数
+const videoEventsRefs = ref({})
+
+// 组件卸载时清理HLS播放器和事件监听器
 onUnmounted(() => {
+  // 移除事件监听器
+  if (videoRef.value && videoEventsRefs.value) {
+    videoRef.value.removeEventListener('timeupdate', videoEventsRefs.value.handleTimeUpdate)
+    videoRef.value.removeEventListener('ended', videoEventsRefs.value.handleEnded)
+  }
+
+  // 清理HLS播放器
   if (hls.value) {
     hls.value.destroy()
     hls.value = null
