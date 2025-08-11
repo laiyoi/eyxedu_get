@@ -60,7 +60,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          publish_branch: gh-pages
+          publish_branch: web
           cname: # 可选：如果有自定义域名，在此添加
           allow_empty_commit: false
           keep_files: false
