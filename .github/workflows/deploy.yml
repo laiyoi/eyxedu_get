@@ -40,7 +40,7 @@ jobs:
       - name: Switch to gh-pages branch
         run: |
           git fetch origin gh-pages
-          git checkout gh-pages
+          git switch gh-pages -f
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
