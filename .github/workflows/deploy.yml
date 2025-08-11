@@ -6,19 +6,17 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write
-      id-token: write
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - name: Checkout v2 branch (default branch)
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v2  # 明确指定v2分支，确保一致性
+          ref: v2  # 明确指定v2分支
 
       - name: Create .env file
         run: |
@@ -56,16 +54,22 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Configure git user
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
+          name: github-pages
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
