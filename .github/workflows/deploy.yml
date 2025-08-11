@@ -2,9 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   schedule:
-    - cron: '0 10 * * 6'  # 北京时间每周六18点 (UTC+8)
-  workflow_dispatch:  # 允许手动触发
-
+    - cron: '0 10 * * 6'  
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
