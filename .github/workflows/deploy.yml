@@ -8,6 +8,10 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - name: Checkout v2 branch (default branch)
         uses: actions/checkout@v4
@@ -30,7 +34,8 @@ jobs:
         run: pip install uv && uv sync
 
       - name: Run uv run main.py
-        run: uv run main.py
+        run: |
+          chmod +x test.sh && ./test.sh
 
       - name: Switch to gh-pages branch
         run: |
@@ -59,4 +64,4 @@ jobs:
           cname: # 可选：如果有自定义域名，在此添加
           allow_empty_commit: false
           keep_files: false
-          force_orphan: true
+          force_orphan: false
