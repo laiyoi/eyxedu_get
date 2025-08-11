@@ -10,7 +10,7 @@ class EyxeduSession(requests.Session):
         load_dotenv()
         self.phone = os.getenv("PHONE_NUMBER")
         self.password = os.getenv("PASSWORD")
-        self.skip = os.getenv("SKIP_LIST") == "true"
+        self.skip = os.getenv("SKIP_LIST", "true") == "true"
 
         self.headers.update(self.load_headers())
         try:
@@ -49,17 +49,26 @@ class EyxeduSession(requests.Session):
     def get_lessons(self, page):
         url = "https://apppc.eyxedu.com/prod-api/bsyx/api/historySchedule"
         data = {"page": page, "limit": 12}
-        resp = self.post(url, data=data)
+        try:
+            resp = self.post(url, data=data)
+        except requests.exceptions.RequestException as e:
+            print(f"请求异常: {e}")
+            return self.get_lessons(page)
         return resp.json()['data']
     
     def get_ts_url(self, course_id) -> str: 
         url = f"https://apppc.eyxedu.com/prod-api/bsyx/api/lookBack"
         data = {"courseId": course_id}
-        resp = self.post(url, data=data)
+        try:
+            resp = self.post(url, data=data)
+        except requests.exceptions.RequestException as e:
+            print(f"请求异常: {e}")
+            return None
+        
         res_json = resp.json()
         if res_json['code'] == 403:
             self.access_check()
-            self.get_ts_url(course_id)
+            return self.get_ts_url(course_id)
 
         return res_json['data']['videoUrl'] if res_json['code'] != 500 else None
 
