@@ -2,7 +2,6 @@ import path from 'path';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 import { VueLoaderPlugin } from 'vue-loader';
-import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 export default {
   mode: 'production',
@@ -21,7 +20,7 @@ export default {
       },
       {
         test: /\.css$/,
-        use: [MiniCssExtractPlugin.loader, 'css-loader']
+        use: ['style-loader', 'css-loader']
       },
       {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
@@ -35,9 +34,6 @@ export default {
   },
   plugins: [
     new VueLoaderPlugin(),
-    new MiniCssExtractPlugin({
-      filename: 'assets/[name].[contenthash].css'
-    }),
     new HtmlWebpackPlugin({
       template: './index.html',
       filename: 'index.html',
