@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 // https://vite.dev/config/
 export default defineConfig({
   // 部署到GitHub Pages时使用仓库名称作为基础路径
-  base: '/eyxedu_get/',
+  base: './',
   plugins: [vue()],
   build: {
     outDir: 'dist',
