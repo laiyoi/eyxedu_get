@@ -2,15 +2,20 @@ name: Deploy to GitHub Pages
 
 on:
   schedule:
-    - cron: '0 10 * * 6'  
+    - cron: '0 10 * * 6'  # 北京时间每周六18点 (UTC+8)
+
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
     steps:
-      - name: Checkout v2 branch (default branch)
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v2  # 明确指定v2分支，确保一致性
+          ref: v2  # 明确指定v2分支
 
       - name: Create .env file
         run: |
@@ -27,13 +32,14 @@ jobs:
       - name: Install uv
         run: pip install uv && uv sync
 
-      - name: Run uv run main.py
-        run: uv run main.py
+      - name: Get lessons
+        run: |
+          uv run main.py
 
       - name: Switch to gh-pages branch
         run: |
           git fetch origin gh-pages
-          git checkout gh-pages
+          git switch gh-pages -f
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,17 +50,27 @@ jobs:
       - name: Install dependencies
         run: npm ci && cp lesson.json public/lesson.json
 
-
       - name: Build
         run: npm run build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
-          cname: # 可选：如果有自定义域名，在此添加
-          allow_empty_commit: false
-          keep_files: false
-          force_orphan: true
+          path: ./dist
+          name: github-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
