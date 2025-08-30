@@ -220,7 +220,7 @@ const formatVideoDate = (timeStr) => {
             class="demo-video"
             controls
             preload="metadata"
-            src="https://upos-sz-estghw.bilivideo.com/upgcxcode/17/15/32056281517/32056281517-1-192.mp4?e=ig8euxZM2rNcNbRahWdVhwdlhWu1hwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&nbs=1&mid=3493273117133651&trid=3676deb1b4224dd5a31f7b2261b5f1fT&os=estghw&og=hw&platform=html5&deadline=1756572631&oi=0x24088270406d62c05d1441a8bfc4fa2b&uipk=5&gen=playurlv3&upsig=f4916d784d31399fab169e7282ff8fc8&uparams=e,nbs,mid,trid,os,og,platform,deadline,oi,uipk,gen&bvc=vod&nettype=0&bw=1388057&agrr=0&buvid=&build=0&dl=0&f=T_0_0&mobi_app=&orderid=0,1"
+            src="https://upos-sz-estghw.bilivideo.com/upgcxcode/17/15/32056281517/32056281517-1-192.mp4?e=ig8euxZM2rNcNbRahWdVhwdlhWu1hwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&deadline=1756583848&nbs=1&uipk=5&platform=html5&os=estghw&og=hw&trid=2d694ca723414d0f87914be7f441912T&oi=0x24088270406d62c05d1441a8bfc4fa2b&mid=3493273117133651&gen=playurlv3&upsig=a11e6db10480ba8e564cceeb797e8a85&uparams=e,deadline,nbs,uipk,platform,os,og,trid,oi,mid,gen&bvc=vod&nettype=0&bw=1388057&f=T_0_0&mobi_app=&agrr=0&buvid=&build=0&dl=0&orderid=0,1"
           >
             您的浏览器不支持视频播放。
           </video>

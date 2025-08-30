@@ -21,23 +21,9 @@ const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const volume = ref(0.7)
-const isMuted = ref(false)
-const isFullscreen = ref(false)
-const showSubtitleSettings = ref(false)
 
 // 网页全屏状态
 const isWebFullscreen = ref(false)
-
-// 字幕设置
-const subtitleSettings = ref({
-  textColor: '#FFFFFF',
-  textOpacity: '100%',
-  backgroundColor: '#000000',
-  backgroundOpacity: '50%',
-  fontSize: '100%',
-  edgeStyle: 'None',
-  fontFamily: 'Proportional Sans-Serif'
-})
 
 // 网页全屏切换函数
 const toggleWebFullscreen = () => {
@@ -151,19 +137,9 @@ const initHlsPlayer = () => {
       hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('Manifest parsed successfully')
         duration.value = videoRef.value.duration
-
-        // 自动播放
-        if (videoRef.value) {
-          videoRef.value.play()
-            .then(() => {
-              isPlaying.value = true
-            })
-            .catch(err => {
-              console.error('Auto-play failed:', err)
-              error.value = '自动播放失败，请点击播放按钮'
-              ElMessage.error(error.value)
-            })
-        }
+        
+        // 尝试自动播放，使用静音播放作为fallback
+        attemptAutoPlay()
       })
 
       // 绑定视频元素和HLS源
@@ -174,17 +150,9 @@ const initHlsPlayer = () => {
       videoRef.value.src = videoUrl
       videoRef.value.addEventListener('loadedmetadata', () => {
         duration.value = videoRef.value.duration
+        // 尝试自动播放，使用静音播放作为fallback
+        attemptAutoPlay()
       })
-
-      videoRef.value.play()
-        .then(() => {
-          isPlaying.value = true
-        })
-        .catch(err => {
-          console.error('Auto-play failed:', err)
-          error.value = '自动播放失败，请点击播放按钮'
-          ElMessage.error(error.value)
-        })
     } else {
       error.value = '您的浏览器不支持HLS视频播放'
       ElMessage.error(error.value)
@@ -214,10 +182,41 @@ const initHlsPlayer = () => {
     // 注册事件监听器
     videoRef.value.addEventListener('timeupdate', videoEventsRefs.value.handleTimeUpdate)
     videoRef.value.addEventListener('ended', videoEventsRefs.value.handleEnded)
-
-    // 初始化音量
-    videoRef.value.volume = volume.value
   })
+}
+
+// 尝试自动播放的函数
+const attemptAutoPlay = () => {
+  if (!videoRef.value) return
+
+  // 尝试正常播放
+  videoRef.value.play()
+    .then(() => {
+      isPlaying.value = true
+      console.log('Auto-play succeeded')
+    })
+    .catch(err => {
+      console.warn('Normal auto-play failed, trying muted auto-play:', err)
+      
+      // 尝试静音播放
+      videoRef.value.muted = true
+      videoRef.value.play()
+        .then(() => {
+          isPlaying.value = true
+          console.log('Muted auto-play succeeded')
+          
+          // 延迟1秒后取消静音
+          setTimeout(() => {
+            if (videoRef.value && isPlaying.value) {
+              videoRef.value.muted = false
+            }
+          }, 1000)
+        })
+        .catch(err2 => {
+          console.error('All auto-play attempts failed:', err2)
+          // 不显示错误消息，让用户手动点击播放
+        })
+    })
 }
 
 // 创建引用存储事件处理函数
