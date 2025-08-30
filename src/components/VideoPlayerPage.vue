@@ -1,4 +1,5 @@
 <script setup>
+// 在现有script setup中添加网页全屏功能
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -24,6 +25,9 @@ const isMuted = ref(false)
 const isFullscreen = ref(false)
 const showSubtitleSettings = ref(false)
 
+// 网页全屏状态
+const isWebFullscreen = ref(false)
+
 // 字幕设置
 const subtitleSettings = ref({
   textColor: '#FFFFFF',
@@ -34,6 +38,24 @@ const subtitleSettings = ref({
   edgeStyle: 'None',
   fontFamily: 'Proportional Sans-Serif'
 })
+
+// 网页全屏切换函数
+const toggleWebFullscreen = () => {
+  isWebFullscreen.value = !isWebFullscreen.value
+  
+  if (isWebFullscreen.value) {
+    document.documentElement.classList.add('webpage-fullscreen-active')
+  } else {
+    document.documentElement.classList.remove('webpage-fullscreen-active')
+  }
+}
+
+// 监听ESC键退出全屏
+const handleEscKey = (event) => {
+  if (event.key === 'Escape' && isWebFullscreen.value) {
+    toggleWebFullscreen()
+  }
+}
 
 // 加载视频数据
 onMounted(async () => {
@@ -62,6 +84,9 @@ onMounted(async () => {
 
     // 初始化HLS播放器
     initHlsPlayer()
+    
+    // 添加键盘监听
+    document.addEventListener('keydown', handleEscKey)
   } catch (err) {
     error.value = err.message
     loading.value = false
@@ -206,6 +231,10 @@ onUnmounted(() => {
     videoRef.value.removeEventListener('ended', videoEventsRefs.value.handleEnded)
   }
 
+  // 清理键盘监听
+  document.removeEventListener('keydown', handleEscKey)
+  document.documentElement.classList.remove('webpage-fullscreen-active')
+
   // 清理HLS播放器
   if (hls.value) {
     hls.value.destroy()
@@ -235,11 +264,10 @@ const formatVideoDate = (timeStr) => {
 const backToList = () => {
   router.push('/')
 }
-
 </script>
 
 <template>
-  <div class="video-player-page">
+  <div class="video-player-page" :class="{ 'webpage-fullscreen': isWebFullscreen }">
     <!-- 顶部导航 -->
     <header class="player-header">
       <div class="header-container">
@@ -253,6 +281,15 @@ const backToList = () => {
           <h1 class="page-title">{{ video?.title || '视频播放' }}</h1>
           <p class="course-time">{{ formatVideoDate(video?.time) }}</p>
         </div>
+        <!-- 网页全屏按钮 -->
+        <button @click="toggleWebFullscreen" class="fullscreen-button" :title="isWebFullscreen ? '退出全屏' : '网页全屏'">
+          <svg v-if="!isWebFullscreen" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -298,162 +335,238 @@ const backToList = () => {
 .video-player-page {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100vh;
   background-color: #f5f5f5;
   color: #333;
   width: 100vw;
-  max-width: 100%;
-  overflow-x: hidden;
-  margin: 0 auto;
+  overflow: hidden;
+  margin: 0;
   padding: 0;
+  box-sizing: border-box;
 }
 
 /* 顶部导航 */
 .player-header {
   background-color: #fff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  flex-shrink: 0;
 }
 
 .header-container {
   width: 100%;
-  max-width: 100%;
   margin: 0;
-  padding: 16px 20px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   gap: 5px;
+  height: 60px;
+  box-sizing: border-box;
 }
 
 .back-button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: none;
   border: none;
   color: #409eff;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 4px;
   transition: background-color 0.2s;
-}
-
-.back-button:hover {
-  background-color: rgba(64, 158, 255, 0.1);
-}
-
-.course-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  height: 36px;
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   margin: 0;
   text-align: left;
+  line-height: 1.2;
 }
 
 .course-time {
-  font-size: 14px;
+  font-size: 12px;
   color: #606266;
   margin: 0;
+  line-height: 1.2;
+}
+
+/* 网页全屏按钮样式 */
+.fullscreen-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  width: 36px;
+  height: 36px;
+}
+
+.fullscreen-button:hover {
+  background: rgba(0, 0, 0, 0.9);
 }
 
 /* 主要内容区 */
 .player-content {
   flex: 1;
   width: 100%;
-  max-width: 95%;
-  margin: 0 auto;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.loading-container, .error-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
   padding: 20px;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
 }
 
-/* 加载状态 */
-.loading-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 5px;
-}
-
-.loading-spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-top-color: #409eff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* 错误信息 */
-.error-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  padding: 40px;
-}
-
-.error-container p {
-  font-size: 18px;
-  color: #f56c6c;
-  text-align: center;
-}
-
-/* 内容包装器 */
-.content-wrapper {
-  display: flex;
-  gap: 5px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-/* 左侧视频区域 */
 .play-lt {
-  flex: 2;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  overflow: hidden;
 }
 
-/* 视频容器 */
 .video-container {
+  flex: 1;
   display: flex;
   flex-direction: column;
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  max-width: 100%;
   width: 100%;
-  height: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.video-player {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+  width: 100%;
+  height: 100%;
 }
 
 .video-element {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  max-width: 100%;
+  max-height: 100%;
 }
 
+/* 完全按照油猴脚本实现，确保视频画面被缩放 */
+.webpage-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background-color: black !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
 
+.webpage-fullscreen .video-container {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: black !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.webpage-fullscreen .video-player {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: black !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.webpage-fullscreen .video-element {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* 保持顶部导航栏可访问 */
+.webpage-fullscreen .player-header {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent) !important;
+  box-shadow: none !important;
+  z-index: 10000 !important;
+  transition: opacity 0.3s ease !important;
+  opacity: 0 !important;
+}
+
+.webpage-fullscreen .player-header:hover {
+  opacity: 1 !important;
+}
+
+.webpage-fullscreen .header-container {
+  background: none !important;
+  padding: 10px 20px !important;
+}
+
+.webpage-fullscreen .page-title,
+.webpage-fullscreen .course-time {
+  color: white !important;
+}
+
+.webpage-fullscreen .back-button {
+  color: white !important;
+}
+
+.webpage-fullscreen .fullscreen-button {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+}
+
+.webpage-fullscreen .fullscreen-button:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .fullscreen-button {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+  }
+  
+  .fullscreen-button svg {
+    width: 16px;
+    height: 16px;
+  }
+}
 </style>

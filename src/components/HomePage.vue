@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 // 创建router引用
@@ -13,6 +13,15 @@ const error = ref(null)
 // 分页状态
 const currentPage = ref(1)
 const itemsPerPage = ref(18) // 每页显示18个视频 (6列x3行)
+const showDemo = ref(false) // 控制演示框展开状态
+const demoVideo = ref(null) // 视频播放器引用
+
+// 监听showDemo变化，收回时暂停视频
+watch(showDemo, (newVal) => {
+  if (!newVal && demoVideo.value) {
+    demoVideo.value.pause()
+  }
+})
 
 // 加载视频数据
 onMounted(async () => {
@@ -198,6 +207,29 @@ const formatVideoDate = (timeStr) => {
     </header>
 
     <div class="main-content">
+      <!-- 本地部署演示区域 -->
+      <div class="demo-section">
+        <div class="demo-header" @click="showDemo = !showDemo">
+          <h3>查看本地部署演示</h3>
+          <span class="expand-icon">{{ showDemo ? '▼' : '▶' }}</span>
+        </div>
+        
+        <div v-show="showDemo" class="demo-content">
+          <video 
+            ref="demoVideo"
+            class="demo-video"
+            controls
+            preload="metadata"
+            src="https://upos-sz-estghw.bilivideo.com/upgcxcode/17/15/32056281517/32056281517-1-192.mp4?e=ig8euxZM2rNcNbRahWdVhwdlhWu1hwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&nbs=1&mid=3493273117133651&trid=3676deb1b4224dd5a31f7b2261b5f1fT&os=estghw&og=hw&platform=html5&deadline=1756572631&oi=0x24088270406d62c05d1441a8bfc4fa2b&uipk=5&gen=playurlv3&upsig=f4916d784d31399fab169e7282ff8fc8&uparams=e,nbs,mid,trid,os,og,platform,deadline,oi,uipk,gen&bvc=vod&nettype=0&bw=1388057&agrr=0&buvid=&build=0&dl=0&f=T_0_0&mobi_app=&orderid=0,1"
+          >
+            您的浏览器不支持视频播放。
+          </video>
+          <div class="demo-description">
+            <p>这是一个本地部署演示视频，展示了如何搭建和使用亿云校视频系统。</p>
+          </div>
+        </div>
+      </div>
+
       <!-- 加载状态 -->
       <div v-if="loading" class="loading">
         <div class="el-loading-spinner">
@@ -250,7 +282,7 @@ const formatVideoDate = (timeStr) => {
     </div>
 
     <footer class="footer">
-      <p>© {{ new Date().getFullYear() }} 视频导航网站</p>
+      <p>© {{ new Date().getFullYear() }} 亿云校</p>
     </footer>
   </div>
 </template>
@@ -258,138 +290,201 @@ const formatVideoDate = (timeStr) => {
 <style scoped>
 /* 基础样式 */
 
-.home-page { width: 100%; margin: 0; padding: 20px; }
+.home-page { 
+  width: 100vw; 
+  height: 100vh;
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box;
+  overflow: hidden; /* 完全隐藏滚动 */
+  display: flex;
+  flex-direction: column;
+}
 
 /* 头部样式 */
 .header {
   text-align: center;
-  margin-bottom: 30px;
-  padding: 10px 0;
+  margin: 0; /* 移除所有margin */
+  padding: 6px 0; /* 进一步减少padding */
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* 减小阴影 */
+  border-radius: 0; /* 移除圆角 */
+  flex-shrink: 0;
 }
 
-.header h1 { font-size: clamp(1.5rem, 3vw, 2.5rem); margin-bottom: 8px; color: #333; font-weight: 700; }
+.header h1 { 
+  font-size: clamp(1.2rem, 2vw, 1.8rem); /* 进一步减小字体 */
+  margin: 0; 
+  color: #333; 
+  font-weight: 700; 
+  line-height: 1.2;
+}
 
-.header p { font-size: clamp(1rem, 2vw, 1.25rem); color: #666; }
+.header p { 
+  font-size: clamp(0.8rem, 1.2vw, 1rem); /* 减小字体 */
+  color: #666; 
+  margin: 0; 
+  line-height: 1.2;
+}
 
-/* 主要内容区样式 */
+/* 主要内容区域 */
 .main-content {
+  flex: 1;
   background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  max-width: 100%;
-  width: 100%;
-}
-
-/* 加载状态样式 */
-.loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-}
-
-.el-loading-spinner {
-  width: 50px;
-  height: 50px;
-}
-
-.circular {
-  animation: rotate 2s linear infinite;
-  height: 50px;
-  width: 50px;
-}
-
-.path {
-  stroke: #409eff;
-  stroke-dasharray: 90, 150;
-  stroke-dashoffset: 0;
-  stroke-linecap: round;
-  animation: dash 1.5s ease-in-out infinite;
-  stroke-width: 2;
-}
-
-@keyframes rotate {}
-@keyframes dash {}
-
-/* 错误信息样式 */
-.error {
-  text-align: center;
-  color: #f56c6c;
-  padding: 20px;
-  background-color: #fef0f0;
-  border-radius: 4px;
-  margin-bottom: 20px;
+  padding: 10px; /* 减少padding */
+  overflow-y: auto; /* 只在内容区域允许垂直滚动 */
+  box-sizing: border-box;
 }
 
 /* 视频列表样式 */
-.review-list { display: flex; width: 100%; flex-wrap: wrap; margin-right: -1.5%; gap: 5px; }
+.review-list { 
+  display: flex; 
+  width: 100%; 
+  flex-wrap: wrap; 
+  gap: 6px; 
+  margin: 0;
+  padding: 0;
+}
 
-.el-card { width: 16% ; aspect-ratio: 2/1; border-radius: 8px; overflow: hidden; transition: all 0.3s; box-sizing: border-box; display: flex; flex-direction: column} /* 默认6列，16:9宽高比 */
+.el-card { 
+  width: calc(16.666% - 5px); 
+  aspect-ratio: 16/9; /* 调整为16:9，更合适的视频比例 */
+  border-radius: 6px; /* 减小圆角 */
+  overflow: hidden; 
+  transition: all 0.3s; 
+  box-sizing: border-box; 
+  display: flex; 
+  flex-direction: column;
+  margin: 0;
+}
 
-.el-card__body { padding: 5%; flex-grow: 1; display: flex; flex-direction: column}
+/* 视频卡片内部样式优化 */
+.el-card__body { 
+  padding: 8px; 
+  flex-grow: 1; 
+  display: flex; 
+  flex-direction: column;
+}
 
-.review-info { flex-grow: 1; display: flex; flex-direction: column}
+.review-info { 
+  flex-grow: 1; 
+  display: flex; 
+  flex-direction: column;
+  justify-content: space-between;
+}
 
-.review-title { font-size: clamp(0.7rem, 2vw, 1rem); margin-bottom: 8px; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden}
+.review-title { 
+  font-size: clamp(0.85rem, 2vw, 1rem); /* 增大标题字体 */
+  margin-bottom: 4px; 
+  display: -webkit-box; 
+  -webkit-box-orient: vertical; 
+  overflow: hidden;
+  line-height: 1.3; /* 稍微增加行高 */
+  font-weight: 600; /* 增加字重 */
+  color: #2c3e50; /* 更深的颜色 */
+}
 
-.review-course-info { font-size: clamp(0.6rem, 1.5vw, 0.8rem); margin-bottom: 8px}
+.review-course-info { 
+  font-size: clamp(0.7rem, 1.5vw, 0.8rem); /* 时间信息字体稍小 */
+  margin-bottom: 6px;
+  line-height: 1.2;
+  color: #7f8c8d; /* 灰色 */
+}
 
-.el-button--small { padding: 4px 10px; font-size: clamp(0.6rem, 1.5vw, 0.8rem)}
+.el-button--small { 
+  padding: 4px 8px; /* 稍微增大按钮 */
+  font-size: clamp(0.65rem, 1.3vw, 0.75rem); /* 增大按钮字体 */
+  line-height: 1.2;
+  font-weight: 500; /* 增加按钮字重 */
+}
 
 /* 分页控件样式 */
 .pagination-container {
-  margin-top: 30px;
+  margin-top: 10px; /* 减少顶部margin */
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .pagination {
   display: flex;
   align-items: center;
-  gap: 5px;
-  width: 100%;
+  gap: 3px; /* 减少间距 */
   max-width: 100%;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding-bottom: 2px;
   justify-content: center;
 }
 
 .pagination-btn {
-  padding: 6px 12px;
+  padding: 3px 8px;
   background-color: #f0f0f0;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
-}
-
-.pagination-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  font-size: 0.8rem;
 }
 
 .pagination-item {
-  padding: 6px 12px;
+  padding: 3px 6px;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
+  font-size: 0.8rem;
 }
 
-.pagination-item.active {
-  background-color: #409eff;
-  color: white;
-  border-color: #409eff;
+.pagination-info { 
+  font-size: clamp(0.65rem, 1.2vw, 0.8rem); 
+  color: #666; 
 }
 
-.pagination-info { font-size: clamp(0.7rem, 1.5vw, 0.9rem); color: #666; }
+/* 本地部署演示区域样式 */
+.demo-section {
+  margin-bottom: 15px; /* 减少底部margin */
+  border: 1px solid #e0e0e0;
+  border-radius: 6px; /* 减小圆角 */
+  overflow: hidden;
+  background-color: #fafafa;
+  flex-shrink: 0;
+}
 
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px; /* 减少padding */
+  background-color: #f5f5f5;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
 
+.demo-header h3 {
+  margin: 0;
+  font-size: 1rem; /* 减小字体 */
+  color: #333;
+}
+
+.demo-content {
+  padding: 15px; /* 减少padding */
+  background-color: white;
+}
+
+.demo-video {
+  width: 100%;
+  max-width: 600px; /* 减小最大宽度 */
+  height: auto;
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+
+.demo-description p {
+  margin: 0;
+  color: #666;
+  font-size: 0.8rem; /* 减小字体 */
+  line-height: 1.3;
+}
 </style>
