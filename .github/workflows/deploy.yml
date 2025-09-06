@@ -1,6 +1,8 @@
 name: Deploy to GitHub Pages
 
 on:  # 北京时间每周六18点 (UTC+8)
+  schedule:
+    - cron: '0 10 * * 6' 
   workflow_dispatch:  # 允许手动触发
 
 jobs:
