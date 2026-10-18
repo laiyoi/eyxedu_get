@@ -339,7 +339,7 @@ function titleOf(item) {
                   <dd>{{ row.value }}</dd>
                 </div>
               </dl>
-              <p v-if="playing" class="info-tip">播放位置会自动记住，下次打开自动续播。</p>
+              <p v-if="playing" class="info-tip">播放进度记录在本机，下次打开这门课会从上次位置继续。</p>
             </section>
           </div>
 

@@ -28,8 +28,8 @@ const repo = 'https://github.com/laiyoi/eyxedu_get'
 
     <footer class="app-footer">
       <div class="container app-footer__inner">
-        <p>© {{ year }} 亿云校课程回放 · 数据由 <code>lesson.json</code> 提供</p>
-        <p class="app-footer__note">仅供个人学习使用</p>
+        <p>© {{ year }} 亿云校课程回放</p>
+        <p class="app-footer__note">数据每周六自动更新 · 仅供个人学习使用</p>
       </div>
     </footer>
   </div>
@@ -153,15 +153,6 @@ const repo = 'https://github.com/laiyoi/eyxedu_get'
   padding-block: 20px;
   font-size: 12.5px;
   color: var(--text-3);
-}
-
-.app-footer__inner code {
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--surface-2);
-  color: var(--text-2);
 }
 
 .app-footer__note {

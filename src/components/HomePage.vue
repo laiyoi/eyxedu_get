@@ -126,11 +126,9 @@ const pages = computed(() => {
 
 const hasFilter = computed(() => Boolean(keyword.value || subject.value || grade.value))
 
-const resultText = computed(() => {
-  if (loading.value) return '正在加载课程数据…'
-  if (hasFilter.value) return `找到 ${filtered.value.length} 节符合条件`
-  return `共 ${filtered.value.length} 节课程`
-})
+const resultText = computed(() =>
+  hasFilter.value ? `筛选出 ${filtered.value.length} 节` : `共 ${filtered.value.length} 节课程`
+)
 
 watch(totalPages, (total) => {
   if (page.value > total) page.value = total
@@ -199,18 +197,16 @@ onBeforeUnmount(() => {
       <div class="container hero__inner">
         <p class="hero__eyebrow">
           <span class="dot" aria-hidden="true"></span>
-          持续更新的课程回放索引
+          数据每周六自动更新
         </p>
-        <h1 class="hero__title">
-          找一节回放，<span class="hero__accent">几秒就好</span>
-        </h1>
+        <h1 class="hero__title">亿云校课程回放</h1>
         <p class="hero__sub">
           <template v-if="!loading && !error">
-            共 <strong>{{ summary.total.toLocaleString('zh-CN') }}</strong> 节课程 ·
-            覆盖 <strong>{{ summary.subjects }}</strong> 个学科 ·
-            最近更新 <strong>{{ summary.latest }}</strong>
+            共 <strong>{{ summary.total.toLocaleString('zh-CN') }}</strong> 节课程，覆盖
+            <strong>{{ summary.subjects }}</strong> 个学科，最近一次收录于
+            <strong>{{ summary.latest }}</strong>。可按学科、年级或关键词检索。
           </template>
-          <template v-else>按学科、年级、关键词快速定位想要的课程</template>
+          <template v-else>正在读取课程数据…</template>
         </p>
 
         <div class="search" :class="{ 'search--active': focused }">
@@ -226,7 +222,7 @@ onBeforeUnmount(() => {
             type="search"
             autocomplete="off"
             spellcheck="false"
-            placeholder="搜索课程，例如：高二物理 习题课、函数、作文"
+            placeholder="搜索课程名，例如「高二物理」「函数」「作文」"
             aria-label="搜索课程"
             @focus="focused = true"
             @blur="focused = false"
@@ -282,9 +278,9 @@ onBeforeUnmount(() => {
     <!-- ------------------------------ 结果 ------------------------------ -->
     <section ref="resultsRef" class="results container">
       <div class="results__head">
-        <p class="results__count">
+        <p v-if="hasFilter && !loading" class="results__count">
           {{ resultText }}
-          <span v-if="hasFilter" class="results__hint">
+          <span class="results__hint">
             · <button type="button" class="link-btn" @click="resetFilters">清除筛选</button>
           </span>
         </p>
@@ -312,7 +308,7 @@ onBeforeUnmount(() => {
       <div v-else-if="error" class="state state--error">
         <div class="state__icon">!</div>
         <h2>{{ error }}</h2>
-        <p>请检查网络后重试，或确认 <code>lesson.json</code> 是否已部署。</p>
+        <p>请检查网络连接后重试；如果一直失败，可能是课程数据还没有生成。</p>
         <button type="button" class="btn btn--primary" @click="fetchData">重新加载</button>
       </div>
 
@@ -324,9 +320,9 @@ onBeforeUnmount(() => {
             <path d="m20 20-3.2-3.2" />
           </svg>
         </div>
-        <h2>没有匹配的课程</h2>
-        <p v-if="hasFilter">换个关键词，或者把学科、年级放宽试试。</p>
-        <p v-else>课程数据是空的，可能是 lesson.json 还没生成。</p>
+        <h2>没有找到符合条件的课程</h2>
+        <p v-if="hasFilter">换个关键词，或者清除学科、年级筛选后再试。</p>
+        <p v-else>暂时没有课程数据，请稍后重试。</p>
         <button v-if="hasFilter" type="button" class="btn" @click="resetFilters">清除筛选条件</button>
       </div>
 
@@ -455,13 +451,6 @@ onBeforeUnmount(() => {
   line-height: 1.18;
   letter-spacing: -0.02em;
   font-weight: 800;
-}
-
-.hero__accent {
-  background: linear-gradient(100deg, var(--brand-600), #0ea5e9 70%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 .hero__sub {
@@ -687,6 +676,10 @@ onBeforeUnmount(() => {
   color: var(--text-2);
 }
 
+.results__head .select {
+  margin-left: auto;
+}
+
 .results__hint {
   color: var(--text-3);
 }
@@ -894,14 +887,6 @@ onBeforeUnmount(() => {
   max-width: 420px;
   font-size: 13.5px;
   color: var(--text-2);
-}
-
-.state code {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--surface-2);
 }
 
 .state__icon {
