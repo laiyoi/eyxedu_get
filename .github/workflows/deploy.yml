@@ -1,0 +1,77 @@
+name: Deploy to GitHub Pages
+
+on:  # 北京时间每周六18点 (UTC+8)
+  schedule:
+    - cron: '0 10 * * 6' 
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: v2  # 明确指定v2分支
+
+      - name: Create .env file
+        run: |
+          # 从GitHub Secrets加载环境变量
+          echo "PHONE_NUMBER=${{ secrets.PHONE_NUMBER }}" >> .env
+          echo "PASSWORD=${{ secrets.PASSWORD }}" >> .env
+          # 添加更多环境变量...
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install uv
+        run: pip install uv && uv sync
+
+      - name: Get lessons
+        run: |
+          uv run main.py
+
+      - name: Switch to gh-pages branch
+        run: |
+          git fetch origin gh-pages
+          git switch gh-pages -f
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci && cp lesson.json public/lesson.json
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+          name: github-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
