@@ -2,21 +2,21 @@ name: Deploy to GitHub Pages
 
 on:  # 北京时间每周六18点 (UTC+8)
   schedule:
-    - cron: '0 10 * * 6' 
+    - cron: '0 10 * * 6'
   workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v2  # 明确指定v2分支
+          ref: main  # 前端源码已合并进 main，直接在此构建
 
       - name: Create .env file
         run: |
@@ -36,11 +36,6 @@ jobs:
       - name: Get lessons
         run: |
           uv run main.py
-
-      - name: Switch to gh-pages branch
-        run: |
-          git fetch origin gh-pages
-          git switch gh-pages -f
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
