@@ -1,490 +1,1067 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  SUBJECTS,
+  GRADES,
+  SORTS,
+  loadLessons,
+  filterLessons,
+  sortLessons,
+  summarize,
+  highlightParts
+} from '../utils/lessons'
 
-// 创建router引用
+const route = useRoute()
 const router = useRouter()
 
-// 视频数据状态
-const videoData = ref(null)
+/* ----------------------------- 数据 ----------------------------- */
+const all = ref([])
 const loading = ref(true)
-const error = ref(null)
+const error = ref('')
 
-// 分页状态
-const currentPage = ref(1)
-const itemsPerPage = ref(18) // 每页显示18个视频 (6列x3行)
-const showDemo = ref(false) // 控制演示框展开状态
-const demoVideo = ref(null) // 视频播放器引用
-
-// 监听showDemo变化，收回时暂停视频
-watch(showDemo, (newVal) => {
-  if (!newVal && demoVideo.value) {
-    demoVideo.value.pause()
-  }
-})
-
-// 加载视频数据
-onMounted(async () => {
+async function fetchData() {
+  loading.value = true
+  error.value = ''
   try {
-    // 使用相对路径请求lesson.json
-    const response = await fetch('lesson.json')
-    if (!response.ok) {
-      throw new Error('Network response was not ok')
-    }
-    videoData.value = await response.json()
+    all.value = await loadLessons()
   } catch (err) {
-    error.value = err.message
+    error.value = err && err.message ? err.message : '课程数据加载失败'
   } finally {
     loading.value = false
   }
+}
+
+/* ----------------------------- 查询状态 ----------------------------- */
+const inputValue = ref('')
+const keyword = ref('')
+const subject = ref('')
+const grade = ref('')
+const sort = ref(SORTS[0].value)
+const page = ref(1)
+const pageSize = ref(24)
+
+const searchRef = ref(null)
+const resultsRef = ref(null)
+const focused = ref(false)
+
+function readQuery() {
+  const q = route.query
+  const raw = typeof q.q === 'string' ? q.q : ''
+  inputValue.value = raw
+  keyword.value = raw
+  subject.value = typeof q.subject === 'string' && SUBJECTS.some((s) => s.name === q.subject) ? q.subject : ''
+  grade.value = typeof q.grade === 'string' && GRADES.includes(q.grade) ? q.grade : ''
+  sort.value = SORTS.some((s) => s.value === q.sort) ? String(q.sort) : SORTS[0].value
+  const p = Number(q.page)
+  page.value = Number.isFinite(p) && p >= 1 ? Math.floor(p) : 1
+}
+
+function syncUrl() {
+  const query = {}
+  if (keyword.value) query.q = keyword.value
+  if (subject.value) query.subject = subject.value
+  if (grade.value) query.grade = grade.value
+  if (sort.value !== SORTS[0].value) query.sort = sort.value
+  if (page.value > 1) query.page = String(page.value)
+  router.replace({ path: '/', query })
+}
+
+/* 输入防抖，避免每个字符都重算并写 URL */
+let debounceTimer = null
+watch(inputValue, (value) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    keyword.value = value.trim()
+    page.value = 1
+  }, 180)
 })
 
-// 视频列表数据
-const videos = computed(() => {
-  return videoData.value || []
+watch([subject, grade, sort], () => {
+  page.value = 1
 })
 
-// 分页计算
-const paginatedVideos = computed(() => {
-  const startIndex = (currentPage.value - 1) * itemsPerPage.value
-  return videos.value.slice(startIndex, startIndex + itemsPerPage.value)
+watch([keyword, subject, grade, sort, page], syncUrl)
+
+/* ----------------------------- 计算 ----------------------------- */
+const filtered = computed(() =>
+  sortLessons(
+    filterLessons(all.value, {
+      keyword: keyword.value,
+      subject: subject.value,
+      grade: grade.value
+    }),
+    sort.value
+  )
+)
+
+const summary = computed(() => summarize(all.value))
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
+
+const pageItems = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
 })
 
-const totalPages = computed(() => {
-  return Math.ceil(videos.value.length / itemsPerPage.value)
+const pages = computed(() => {
+  const total = totalPages.value
+  const current = page.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+
+  const wanted = new Set([1, total, current, current - 1, current + 1])
+  if (current <= 3) [2, 3, 4].forEach((n) => wanted.add(n))
+  if (current >= total - 2) [total - 3, total - 2, total - 1].forEach((n) => wanted.add(n))
+
+  const sorted = [...wanted].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
+  const out = []
+  let prev = 0
+  for (const n of sorted) {
+    if (prev && n - prev > 1) out.push('…')
+    out.push(n)
+    prev = n
+  }
+  return out
 })
 
-// 可见页码计算（总长度恒为15）
-const visiblePages = computed(() => {
-  const pages = []
-  const totalDisplayLength = 15
-  let availableNumberSlots = totalDisplayLength - 2 // 减去第一页和最后一页，剩下13个数字槽位
+const hasFilter = computed(() => Boolean(keyword.value || subject.value || grade.value))
 
-  // 始终添加第一页
-  pages.push(1)
-
-  // 如果总页数 <= totalDisplayLength，直接显示所有页码
-  if (totalPages.value <= totalDisplayLength) {
-    for (let i = 2; i < totalPages.value; i++) {
-      pages.push(i)
-    }
-  } else {
-    // 计算当前页应该显示的范围
-    let startPage, endPage
-    let hasLeftEllipsis = false
-    let hasRightEllipsis = false
-
-    // 如果当前页靠近前面（前11页）
-    if (currentPage.value <= 11) {
-      startPage = 2
-      endPage = 12 // 显示1-12页，共12个数字页码
-      hasRightEllipsis = true
-    }
-    // 如果当前页靠近后面（后11页）
-    else if (currentPage.value >= totalPages.value - 10) {
-      startPage = totalPages.value - 11
-      endPage = totalPages.value - 1
-      hasLeftEllipsis = true
-    }
-    // 如果当前页在中间
-    else {
-      startPage = currentPage.value - 5 // 当前页前5页
-      endPage = currentPage.value + 5 // 当前页后5页
-      hasLeftEllipsis = true
-      hasRightEllipsis = true
-    }
-
-    // 添加左侧省略号
-    if (hasLeftEllipsis) {
-      pages.push('...')
-    }
-
-    // 添加数字页码
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i)
-    }
-
-    // 添加右侧省略号
-    if (hasRightEllipsis) {
-      pages.push('...')
-    }
-  }
-
-  // 始终添加最后一页
-  if (totalPages.value > 1) {
-    pages.push(totalPages.value)
-  }
-
-  // 确保总长度为15（防止异常情况）
-  if (pages.length > totalDisplayLength) {
-    // 保留第一页、最后一页和中间的13个元素
-    const middlePart = pages.slice(1, -1)
-    pages.splice(1, pages.length - 2, ...middlePart.slice(0, 13))
-  } else if (pages.length < totalDisplayLength) {
-    // 如果不足15个，尝试在合适位置添加省略号
-    if (pages.indexOf('...') === -1 && pages.length > 2) {
-      // 在第二位置添加省略号
-      pages.splice(1, 0, '...')
-    }
-  }
-
-  // 确保总长度为16，如果不足则填充
-  while (pages.length < totalDisplayLength) {
-    // 尝试在合适位置插入省略号
-    if (pages.indexOf('...') === -1 && pages.length > 2) {
-      // 在第二位置添加省略号
-      pages.splice(1, 0, '...')
-    } else {
-      // 如果已有省略号或无法添加，则重复最后一个数字页码前的数字
-      const lastNumIndex = pages.findLastIndex(item => typeof item === 'number')
-      if (lastNumIndex > 0 && lastNumIndex < pages.length - 1) {
-        pages.splice(lastNumIndex, 0, pages[lastNumIndex] - 1)
-      } else {
-        break // 无法继续填充
-      }
-    }
-  }
-
-  // 如果超过16，则截断（理论上不应该发生）
-  if (pages.length > totalDisplayLength) {
-    // 保留第一页、最后一页和中间的14个元素
-    const middlePart = pages.slice(1, -1)
-    while (pages.length > totalDisplayLength) {
-      // 优先移除省略号
-      const ellipsisIndex = middlePart.indexOf('...')
-      if (ellipsisIndex !== -1) {
-        middlePart.splice(ellipsisIndex, 1)
-      } else if (middlePart.length > 0) {
-        // 如果没有省略号，则移除中间的页码
-        const removeIndex = Math.floor(middlePart.length / 2)
-        middlePart.splice(removeIndex, 1)
-      } else {
-        break
-      }
-    }
-    pages.splice(1, pages.length - 2, ...middlePart)
-  }
-
-  return pages
+const resultText = computed(() => {
+  if (loading.value) return '正在加载课程数据…'
+  if (hasFilter.value) return `找到 ${filtered.value.length} 节符合条件`
+  return `共 ${filtered.value.length} 节课程`
 })
 
-// 分页方法
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
+watch(totalPages, (total) => {
+  if (page.value > total) page.value = total
+})
+
+/* ----------------------------- 交互 ----------------------------- */
+function go(target) {
+  if (target < 1 || target > totalPages.value || target === page.value) return
+  page.value = target
+  nextTick(() => {
+    const el = resultsRef.value
+    if (!el) return
+    const top = el.getBoundingClientRect().top + window.scrollY - 128
+    window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' })
+  })
+}
+
+function pickSubject(name) {
+  subject.value = subject.value === name ? '' : name
+}
+
+function clearSearch() {
+  inputValue.value = ''
+  keyword.value = ''
+  page.value = 1
+  nextTick(() => searchRef.value && searchRef.value.focus())
+}
+
+function resetFilters() {
+  inputValue.value = ''
+  keyword.value = ''
+  subject.value = ''
+  grade.value = ''
+  page.value = 1
+}
+
+function onKeydown(event) {
+  const tag = (event.target && event.target.tagName) || ''
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (event.target && event.target.isContentEditable)
+
+  if (event.key === '/' && !typing) {
+    event.preventDefault()
+    if (searchRef.value) searchRef.value.focus()
+  } else if (event.key === 'Escape' && typing) {
+    event.target.blur()
+    if (event.target === searchRef.value && inputValue.value) clearSearch()
   }
 }
 
-const prevPage = () => {
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
-}
+onMounted(() => {
+  readQuery()
+  fetchData()
+  window.addEventListener('keydown', onKeydown)
+})
 
-const goToPage = (page) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-  }
-}
-
-// 格式化视频日期
-const formatVideoDate = (timeStr) => {
-  if (!timeStr) return ''
-  const parts = timeStr.split(' ')
-  if (parts.length < 2) return timeStr
-  const date = parts[0]
-  const time = parts[1].replace(/-/g, ':')
-  return `${date} ${time}`
-}
-
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
 </script>
 
 <template>
-  <div class="home-page">
-    <header class="header">
-      <h1>亿云校索引</h1>
-      <p>关注永雏塔菲谢谢喵</p>
-    </header>
+  <div class="home">
+    <!-- ------------------------------ Hero ------------------------------ -->
+    <section class="hero">
+      <div class="container hero__inner">
+        <p class="hero__eyebrow">
+          <span class="dot" aria-hidden="true"></span>
+          持续更新的课程回放索引
+        </p>
+        <h1 class="hero__title">
+          找一节回放，<span class="hero__accent">几秒就好</span>
+        </h1>
+        <p class="hero__sub">
+          <template v-if="!loading && !error">
+            共 <strong>{{ summary.total.toLocaleString('zh-CN') }}</strong> 节课程 ·
+            覆盖 <strong>{{ summary.subjects }}</strong> 个学科 ·
+            最近更新 <strong>{{ summary.latest }}</strong>
+          </template>
+          <template v-else>按学科、年级、关键词快速定位想要的课程</template>
+        </p>
 
-    <div class="main-content">
-      <!-- 本地部署演示区域 -->
-      <div class="demo-section">
-        <div class="demo-header" @click="showDemo = !showDemo">
-          <h3>查看本地部署演示</h3>
-          <span class="expand-icon">{{ showDemo ? '▼' : '▶' }}</span>
-        </div>
-        
-        <div v-show="showDemo" class="demo-content">
-          <video 
-            ref="demoVideo"
-            class="demo-video"
-            controls
-            preload="metadata"
-            src="https://upos-sz-estghw.bilivideo.com/upgcxcode/17/15/32056281517/32056281517-1-192.mp4?e=ig8euxZM2rNcNbRahWdVhwdlhWu1hwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&deadline=1756583848&nbs=1&uipk=5&platform=html5&os=estghw&og=hw&trid=2d694ca723414d0f87914be7f441912T&oi=0x24088270406d62c05d1441a8bfc4fa2b&mid=3493273117133651&gen=playurlv3&upsig=a11e6db10480ba8e564cceeb797e8a85&uparams=e,deadline,nbs,uipk,platform,os,og,trid,oi,mid,gen&bvc=vod&nettype=0&bw=1388057&f=T_0_0&mobi_app=&agrr=0&buvid=&build=0&dl=0&orderid=0,1"
-          >
-            您的浏览器不支持视频播放。
-          </video>
-          <div class="demo-description">
-            <p>这是一个本地部署演示视频，展示了如何搭建和使用亿云校视频系统。</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 加载状态 -->
-      <div v-if="loading" class="loading">
-        <div class="el-loading-spinner">
-          <svg viewBox="25 25 50 50" class="circular">
-            <circle cx="50" cy="50" r="20" fill="none" class="path"></circle>
+        <div class="search" :class="{ 'search--active': focused }">
+          <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.2-3.2" />
           </svg>
+          <input
+            ref="searchRef"
+            v-model="inputValue"
+            class="search__input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="搜索课程，例如：高二物理 习题课、函数、作文"
+            aria-label="搜索课程"
+            @focus="focused = true"
+            @blur="focused = false"
+          />
+          <button v-if="inputValue" class="search__clear" type="button" aria-label="清空搜索" @click="clearSearch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+          <kbd v-else class="search__kbd" aria-hidden="true">/</kbd>
         </div>
       </div>
+    </section>
 
-      <!-- 错误信息 -->
-      <div v-else-if="error" class="error">错误: {{ error }}</div>
-
-      <!-- 视频内容 -->
-      <div v-else class="video-content">
-        <!-- 视频列表 -->
-        <div class="review-list flex-wrap">
-          <div v-for="video in paginatedVideos" :key="video.id" class="el-card pointer is-always-shadow">
-            <div class="el-card__body" >
-              <div class="review-wrap">
-                <div class="review-info">
-                  <h3 class="review-title">{{ video.title }}</h3>
-                  <div class="review-course-info">
-                    <span style="font-size: 14px; margin-right: 10px;">时间: {{ formatVideoDate(video.time) }}</span>
-                  </div>
-                  <div class="review-opea flex-sp-between">
-                    <div class="review-btn">
-                      <button @click="router.push({ path: '/player', query: { id: video.id } })" type="button" class="el-button el-button--primary el-button--small">
-                        <span>立即观看</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+    <!-- ------------------------------ 筛选条 ------------------------------ -->
+    <div class="toolbar">
+      <div class="container toolbar__inner">
+        <div class="chips" role="group" aria-label="按学科筛选">
+          <button type="button" class="chip" :class="{ 'chip--active': subject === '' }" @click="subject = ''">
+            全部
+          </button>
+          <button
+            v-for="item in SUBJECTS"
+            :key="item.name"
+            type="button"
+            class="chip"
+            :class="{ 'chip--active': subject === item.name }"
+            :style="{ '--chip': item.color }"
+            @click="pickSubject(item.name)"
+          >
+            {{ item.name }}
+          </button>
         </div>
-      </div>
 
-      <!-- 分页控件 -->
-      <div class="pagination-container" v-if="totalPages > 1">
-        <div class="pagination">
-          <button @click="prevPage" :disabled="currentPage === 1" class="pagination-btn">上一页</button>
-          <div v-for="page in visiblePages" :key="page" class="pagination-item" :class="{ 'active': page === currentPage }" @click="typeof page === 'number' ? goToPage(page) : null">
-            {{ page }}
-          </div>
-          <button @click="nextPage" :disabled="currentPage === totalPages" class="pagination-btn">下一页</button>
+        <div class="toolbar__selects">
+          <label class="select">
+            <span class="sr-only">年级</span>
+            <select v-model="grade">
+              <option value="">全部年级</option>
+              <option v-for="g in GRADES" :key="g" :value="g">{{ g }}</option>
+            </select>
+          </label>
+          <label class="select">
+            <span class="sr-only">排序</span>
+            <select v-model="sort">
+              <option v-for="s in SORTS" :key="s.value" :value="s.value">{{ s.label }}</option>
+            </select>
+          </label>
         </div>
-        <div class="pagination-info">当前第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</div>
       </div>
     </div>
 
-    <footer class="footer">
-      <p>© {{ new Date().getFullYear() }} 亿云校</p>
-    </footer>
+    <!-- ------------------------------ 结果 ------------------------------ -->
+    <section ref="resultsRef" class="results container">
+      <div class="results__head">
+        <p class="results__count">
+          {{ resultText }}
+          <span v-if="hasFilter" class="results__hint">
+            · <button type="button" class="link-btn" @click="resetFilters">清除筛选</button>
+          </span>
+        </p>
+        <label class="select select--sm">
+          <span class="sr-only">每页数量</span>
+          <select v-model.number="pageSize" @change="page = 1">
+            <option :value="24">每页 24</option>
+            <option :value="48">每页 48</option>
+            <option :value="96">每页 96</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- 加载骨架 -->
+      <div v-if="loading" class="grid" aria-hidden="true">
+        <div v-for="n in 12" :key="n" class="card card--skeleton">
+          <div class="sk sk--tag"></div>
+          <div class="sk sk--line"></div>
+          <div class="sk sk--line short"></div>
+          <div class="sk sk--meta"></div>
+        </div>
+      </div>
+
+      <!-- 错误 -->
+      <div v-else-if="error" class="state state--error">
+        <div class="state__icon">!</div>
+        <h2>{{ error }}</h2>
+        <p>请检查网络后重试，或确认 <code>lesson.json</code> 是否已部署。</p>
+        <button type="button" class="btn btn--primary" @click="fetchData">重新加载</button>
+      </div>
+
+      <!-- 空结果 -->
+      <div v-else-if="!filtered.length" class="state">
+        <div class="state__icon state__icon--muted">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.2-3.2" />
+          </svg>
+        </div>
+        <h2>没有匹配的课程</h2>
+        <p v-if="hasFilter">换个关键词，或者把学科、年级放宽试试。</p>
+        <p v-else>课程数据是空的，可能是 lesson.json 还没生成。</p>
+        <button v-if="hasFilter" type="button" class="btn" @click="resetFilters">清除筛选条件</button>
+      </div>
+
+      <!-- 卡片网格 -->
+      <div v-else class="grid">
+        <router-link
+          v-for="item in pageItems"
+          :key="item.id"
+          class="card"
+          :style="{ '--accent': item.color }"
+          :to="{ path: '/player', query: { id: String(item.id) } }"
+        >
+          <div class="card__top">
+            <span class="tag">{{ item.subject }}</span>
+            <span v-if="item.grade" class="tag tag--ghost">{{ item.grade }}</span>
+          </div>
+
+          <h3 class="card__title">
+            <template v-for="(part, i) in highlightParts(item.title, keyword)" :key="i">
+              <mark v-if="part.hit">{{ part.text }}</mark>
+              <span v-else>{{ part.text }}</span>
+            </template>
+          </h3>
+
+          <div class="card__meta">
+            <span class="card__meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <rect x="3" y="5" width="18" height="16" rx="3" />
+                <path d="M8 3v4M16 3v4M3 10h18" />
+              </svg>
+              {{ item.date }}
+            </span>
+            <span v-if="item.clock" class="card__meta-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              {{ item.clock }}
+            </span>
+          </div>
+
+          <span class="card__cta">
+            播放
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5.5v13l11-6.5z" />
+            </svg>
+          </span>
+        </router-link>
+      </div>
+
+      <!-- 分页 -->
+      <nav v-if="!loading && !error && totalPages > 1" class="pager" aria-label="分页">
+        <button type="button" class="pager__btn" :disabled="page === 1" @click="go(page - 1)">上一页</button>
+
+        <div class="pager__pages">
+          <template v-for="(p, i) in pages" :key="`${p}-${i}`">
+            <span v-if="p === '…'" class="pager__gap">…</span>
+            <button
+              v-else
+              type="button"
+              class="pager__page"
+              :class="{ 'pager__page--active': p === page }"
+              :aria-current="p === page ? 'page' : undefined"
+              @click="go(p)"
+            >
+              {{ p }}
+            </button>
+          </template>
+        </div>
+
+        <button type="button" class="pager__btn" :disabled="page === totalPages" @click="go(page + 1)">
+          下一页
+        </button>
+
+        <span class="pager__info">第 {{ page }} / {{ totalPages }} 页</span>
+      </nav>
+    </section>
   </div>
 </template>
 
 <style scoped>
-/* 基础样式 */
-
-.home-page { 
-  width: 100vw; 
-  height: 100vh;
-  margin: 0; 
-  padding: 0; 
-  box-sizing: border-box;
-  overflow: hidden; /* 完全隐藏滚动 */
-  display: flex;
-  flex-direction: column;
-}
-
-/* 头部样式 */
-.header {
-  text-align: center;
-  margin: 0; /* 移除所有margin */
-  padding: 6px 0; /* 进一步减少padding */
-  background-color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* 减小阴影 */
-  border-radius: 0; /* 移除圆角 */
-  flex-shrink: 0;
-}
-
-.header h1 { 
-  font-size: clamp(1.2rem, 2vw, 1.8rem); /* 进一步减小字体 */
-  margin: 0; 
-  color: #333; 
-  font-weight: 700; 
-  line-height: 1.2;
-}
-
-.header p { 
-  font-size: clamp(0.8rem, 1.2vw, 1rem); /* 减小字体 */
-  color: #666; 
-  margin: 0; 
-  line-height: 1.2;
-}
-
-/* 主要内容区域 */
-.main-content {
-  flex: 1;
-  background-color: #fff;
-  padding: 10px; /* 减少padding */
-  overflow-y: auto; /* 只在内容区域允许垂直滚动 */
-  box-sizing: border-box;
-}
-
-/* 视频列表样式 */
-.review-list { 
-  display: flex; 
-  width: 100%; 
-  flex-wrap: wrap; 
-  gap: 6px; 
-  margin: 0;
-  padding: 0;
-}
-
-.el-card { 
-  width: calc(16.666% - 5px); 
-  aspect-ratio: 16/9; /* 调整为16:9，更合适的视频比例 */
-  border-radius: 6px; /* 减小圆角 */
-  overflow: hidden; 
-  transition: all 0.3s; 
-  box-sizing: border-box; 
-  display: flex; 
-  flex-direction: column;
-  margin: 0;
-}
-
-/* 视频卡片内部样式优化 */
-.el-card__body { 
-  padding: 8px; 
-  flex-grow: 1; 
-  display: flex; 
-  flex-direction: column;
-}
-
-.review-info { 
-  flex-grow: 1; 
-  display: flex; 
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.review-title { 
-  font-size: clamp(0.85rem, 2vw, 1rem); /* 增大标题字体 */
-  margin-bottom: 4px; 
-  display: -webkit-box; 
-  -webkit-box-orient: vertical; 
+/* ------------------------------ Hero ------------------------------ */
+.hero {
+  position: relative;
+  padding: 44px 0 26px;
   overflow: hidden;
-  line-height: 1.3; /* 稍微增加行高 */
-  font-weight: 600; /* 增加字重 */
-  color: #2c3e50; /* 更深的颜色 */
 }
 
-.review-course-info { 
-  font-size: clamp(0.7rem, 1.5vw, 0.8rem); /* 时间信息字体稍小 */
-  margin-bottom: 6px;
-  line-height: 1.2;
-  color: #7f8c8d; /* 灰色 */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -40% 40% 40% -10%;
+  background: radial-gradient(closest-side, rgba(99, 102, 241, 0.22), transparent);
+  filter: blur(10px);
+  pointer-events: none;
 }
 
-.el-button--small { 
-  padding: 4px 8px; /* 稍微增大按钮 */
-  font-size: clamp(0.65rem, 1.3vw, 0.75rem); /* 增大按钮字体 */
-  line-height: 1.2;
-  font-weight: 500; /* 增加按钮字重 */
+.hero__inner {
+  position: relative;
 }
 
-/* 分页控件样式 */
-.pagination-container {
-  margin-top: 10px; /* 减少顶部margin */
+.hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.hero__title {
+  margin-top: 16px;
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+.hero__accent {
+  background: linear-gradient(100deg, var(--brand-600), #0ea5e9 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero__sub {
+  margin-top: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.hero__sub strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ------------------------------ 搜索框 ------------------------------ */
+.search {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 0 16px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.search--active {
+  border-color: var(--brand-500);
+  box-shadow: var(--shadow-md), var(--ring);
+}
+
+.search__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: none;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.search__input::placeholder {
+  color: var(--text-3);
+}
+
+.search__input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search__clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+  transition: background-color 0.2s var(--ease);
+}
+
+.search__clear:hover {
+  background: var(--surface-3);
+}
+
+.search__clear svg {
+  width: 15px;
+  height: 15px;
+}
+
+.search__kbd {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 工具栏 ------------------------------ */
+.toolbar {
+  position: sticky;
+  top: 62px;
+  z-index: 30;
+  padding: 10px 0;
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.chips {
+  display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  box-sizing: border-box;
-  flex-shrink: 0;
-}
-
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 3px; /* 减少间距 */
-  max-width: 100%;
   overflow-x: auto;
-  padding-bottom: 2px;
-  justify-content: center;
+  padding: 2px;
+  scrollbar-width: none;
 }
 
-.pagination-btn {
-  padding: 3px 8px;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 0.8rem;
+.chips::-webkit-scrollbar {
+  display: none;
 }
 
-.pagination-item {
-  padding: 3px 6px;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 0.8rem;
+.chip {
+  flex: none;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: all 0.18s var(--ease);
 }
 
-.pagination-info { 
-  font-size: clamp(0.65rem, 1.2vw, 0.8rem); 
-  color: #666; 
+.chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
-/* 本地部署演示区域样式 */
-.demo-section {
-  margin-bottom: 15px; /* 减少底部margin */
-  border: 1px solid #e0e0e0;
-  border-radius: 6px; /* 减小圆角 */
-  overflow: hidden;
-  background-color: #fafafa;
-  flex-shrink: 0;
+.chip--active {
+  color: #fff;
+  background: var(--chip, var(--brand-600));
+  border-color: transparent;
+  box-shadow: 0 6px 14px -8px var(--chip, var(--brand-600));
 }
 
-.demo-header {
+.chip:first-child.chip--active {
+  background: var(--text);
+  box-shadow: none;
+}
+
+.toolbar__selects {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 15px; /* 减少padding */
-  background-color: #f5f5f5;
+  gap: 8px;
+}
+
+.select {
+  position: relative;
+  display: inline-flex;
+}
+
+.select select {
+  appearance: none;
+  height: 34px;
+  padding: 0 30px 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 
-.demo-header h3 {
-  margin: 0;
-  font-size: 1rem; /* 减小字体 */
-  color: #333;
+.select select:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
-.demo-content {
-  padding: 15px; /* 减少padding */
-  background-color: white;
+.select::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  color: var(--text-3);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
 }
 
-.demo-video {
+.select--sm select {
+  height: 30px;
+  font-size: 12.5px;
+}
+
+/* ------------------------------ 结果区 ------------------------------ */
+.results {
+  padding-top: 20px;
+  min-height: 50vh;
+}
+
+.results__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.results__count {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.results__hint {
+  color: var(--text-3);
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand-600);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------ 卡片 ------------------------------ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  --accent: var(--brand-500);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px 16px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  overflow: hidden;
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+}
+
+.card:hover .card__cta {
+  color: var(--accent);
+  gap: 6px;
+}
+
+.card__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--accent);
+  background: var(--surface-2);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tag--ghost {
+  color: var(--text-3);
+  background: var(--surface-2);
+  font-weight: 500;
+}
+
+.card__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.9em;
+}
+
+.card__title mark {
+  background: linear-gradient(transparent 58%, rgba(99, 102, 241, 0.38) 58%);
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.card__meta-item svg {
+  width: 13px;
+  height: 13px;
+}
+
+.card__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  transition: color 0.2s var(--ease), gap 0.2s var(--ease);
+}
+
+.card__cta svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 骨架屏 */
+.card--skeleton {
+  gap: 12px;
+  pointer-events: none;
+}
+
+.card--skeleton::before {
+  opacity: 0.35;
+}
+
+.sk {
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+.sk--tag {
+  width: 54px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.sk--line {
+  height: 14px;
   width: 100%;
-  max-width: 600px; /* 减小最大宽度 */
-  height: auto;
-  border-radius: 3px;
-  margin-bottom: 10px;
 }
 
-.demo-description p {
-  margin: 0;
-  color: #666;
-  font-size: 0.8rem; /* 减小字体 */
-  line-height: 1.3;
+.sk--line.short {
+  width: 62%;
+}
+
+.sk--meta {
+  height: 12px;
+  width: 45%;
+  margin-top: 6px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+/* ------------------------------ 空态 / 错误 ------------------------------ */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 56px 20px 64px;
+  text-align: center;
+}
+
+.state h2 {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.state p {
+  max-width: 420px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.state code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+
+.state__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.state__icon--muted {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+.state__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.btn {
+  margin-top: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  transition: all 0.2s var(--ease);
+}
+
+.btn:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.btn--primary {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+  box-shadow: 0 10px 20px -12px var(--brand-600);
+}
+
+/* ------------------------------ 分页 ------------------------------ */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 28px;
+  padding-top: 8px;
+}
+
+.pager__btn,
+.pager__page {
+  height: 34px;
+  min-width: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: all 0.18s var(--ease);
+}
+
+.pager__btn:hover:not(:disabled),
+.pager__page:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.pager__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pager__pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pager__page {
+  padding: 0 10px;
+}
+
+.pager__page--active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+  box-shadow: 0 8px 18px -10px var(--brand-600);
+}
+
+.pager__gap {
+  padding: 0 4px;
+  color: var(--text-3);
+}
+
+.pager__info {
+  margin-left: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 响应式 ------------------------------ */
+@media (max-width: 900px) {
+  .toolbar {
+    top: 56px;
+  }
+
+  .toolbar__inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .toolbar__selects {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero {
+    padding: 30px 0 18px;
+  }
+
+  .search {
+    height: 50px;
+  }
+
+  .search__kbd {
+    display: none;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .card {
+    padding: 13px 13px 12px;
+  }
+
+  .card__title {
+    font-size: 14px;
+  }
+
+  .pager__info {
+    width: 100%;
+    text-align: center;
+    margin: 6px 0 0;
+  }
 }
 </style>

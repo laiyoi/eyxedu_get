@@ -1,571 +1,826 @@
 <script setup>
-// 在现有script setup中添加网页全屏功能
-import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
+/**
+ * 课程播放页
+ * ------------------------------------------------------------
+ * 播放器用 ArtPlayer（通用播放器内核）+ hls.js 播放 m3u8。
+ * 原始 .ts 是单个 1.3GB 的 MPEG-TS，浏览器无法直接播放，
+ * 所以统一走同名 .m3u8（见 utils/lessons.js 的 toPlayUrl）。
+ */
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import Hls from 'hls.js'
+import zhCn from '../i18n/artplayer-zh-cn'
+import { loadLessons, findLesson, relatedLessons, neighbours } from '../utils/lessons'
 
-// 视频元素引用
-const videoRef = ref(null)
-const hls = ref(null)
-
-// 路由和导航
 const route = useRoute()
 const router = useRouter()
 
-// 视频状态
-const video = ref(null)
+const all = ref([])
+const lesson = ref(null)
 const loading = ref(true)
-const error = ref(null)
-const isPlaying = ref(false)
-const currentTime = ref(0)
-const duration = ref(0)
-const volume = ref(0.7)
+const error = ref('')
+const playing = ref(false)
+const copied = ref(false)
 
-// 网页全屏状态
-const isWebFullscreen = ref(false)
+const stageRef = ref(null)
+const art = shallowRef(null)
 
-// 网页全屏切换函数
-const toggleWebFullscreen = () => {
-  isWebFullscreen.value = !isWebFullscreen.value
-  
-  if (isWebFullscreen.value) {
-    document.documentElement.classList.add('webpage-fullscreen-active')
-  } else {
-    document.documentElement.classList.remove('webpage-fullscreen-active')
-  }
-}
+const related = computed(() => relatedLessons(all.value, lesson.value, 12))
+const around = computed(() => neighbours(all.value, lesson.value))
 
-// 监听ESC键退出全屏
-const handleEscKey = (event) => {
-  if (event.key === 'Escape' && isWebFullscreen.value) {
-    toggleWebFullscreen()
-  }
-}
-
-// 加载视频数据
-onMounted(async () => {
-  try {
-    // 从URL参数获取视频ID
-    const videoId = route.query.id
-    if (!videoId) {
-      throw new Error('视频ID不存在')
-    }
-
-    // 加载lesson.json文件
-    const response = await fetch('lesson.json')
-    if (!response.ok) {
-      throw new Error('获取视频数据失败')
-    }
-    const videos = await response.json()
-
-    // 根据ID查找视频
-    const foundVideo = videos.find(v => v.id === parseInt(videoId))
-    if (!foundVideo) {
-      throw new Error('未找到该视频')
-    }
-
-    video.value = foundVideo
-    loading.value = false
-
-    // 初始化HLS播放器
-    initHlsPlayer()
-    
-    // 添加键盘监听
-    document.addEventListener('keydown', handleEscKey)
-  } catch (err) {
-    error.value = err.message
-    loading.value = false
-    ElMessage.error(error.value)
-  }
+const infoRows = computed(() => {
+  if (!lesson.value) return []
+  return [
+    { label: '学科', value: lesson.value.subject },
+    { label: '年级', value: lesson.value.grade || '—' },
+    { label: '日期', value: lesson.value.date || '—' },
+    { label: '时间', value: lesson.value.clock || '—' },
+    { label: '课程编号', value: `#${lesson.value.id}` }
+  ]
 })
 
-// 初始化HLS播放器
-const initHlsPlayer = () => {
-  // 使用requestAnimationFrame确保DOM已更新
-  requestAnimationFrame(() => {
-    if (!videoRef.value) {
-      console.error('Video element not found, retrying...')
-      // 延迟500ms后重试
-      setTimeout(initHlsPlayer, 500)
-      return
+/* ----------------------------- 生命周期 ----------------------------- */
+onMounted(async () => {
+  try {
+    all.value = await loadLessons()
+  } catch (err) {
+    error.value = err && err.message ? err.message : '课程数据加载失败'
+    loading.value = false
+    return
+  }
+  await openCurrent()
+})
+
+onBeforeUnmount(() => {
+  destroyPlayer()
+})
+
+/* 同一页面内切换课程（侧栏点选）时复用组件，这里监听 id 变化 */
+watch(
+  () => route.query.id,
+  async (id) => {
+    if (!all.value.length) return
+    if (lesson.value && String(lesson.value.id) === String(id)) return
+    await openCurrent()
+  }
+)
+
+/* ----------------------------- 逻辑 ----------------------------- */
+async function openCurrent() {
+  const id = route.query.id
+  if (!id) {
+    error.value = '缺少课程编号，请从课程库进入'
+    loading.value = false
+    return
+  }
+
+  const found = findLesson(all.value, id)
+  if (!found) {
+    // 编号不存在：清掉上一个课程并销毁播放器，走"未找到"整屏状态
+    destroyPlayer()
+    lesson.value = null
+    error.value = `没有找到编号 #${id} 的课程`
+    loading.value = false
+    return
+  }
+
+  error.value = ''
+  lesson.value = found
+  loading.value = false
+
+  await nextTick()
+  await mountPlayer(found)
+}
+
+function destroyPlayer() {
+  if (art.value) {
+    try {
+      art.value.destroy()
+    } catch (e) {
+      /* 忽略销毁异常 */
     }
+    art.value = null
+  }
+  playing.value = false
+}
 
-    // 确定视频URL
-    let videoUrl = video.value.url
+async function mountPlayer(item) {
+  destroyPlayer()
 
-    if (videoUrl.endsWith('.ts')) {
-      videoUrl = videoUrl.replace('.ts', '.m3u8')
-    }
+  const container = stageRef.value
+  if (!container) return
 
-    // 检查浏览器是否支持HLS
-    if (Hls.isSupported()) {
-      // 销毁已存在的HLS实例
-      if (hls.value) {
-        hls.value.destroy()
-        hls.value = null
-      }
+  let Artplayer
+  let Hls
+  try {
+    // 播放器与 HLS 引擎按需加载，首页不需要为它们付体积
+    const [artModule, hlsModule] = await Promise.all([import('artplayer'), import('hls.js')])
+    Artplayer = artModule.default
+    Hls = hlsModule.default
+  } catch (err) {
+    error.value = '播放器脚本加载失败，请刷新页面重试'
+    return
+  }
 
-      // 创建新的HLS实例
-      hls.value = new Hls()
+  art.value = new Artplayer({
+    container,
+    url: item.playUrl,
+    type: 'm3u8',
+    theme: '#6366f1',
+    lang: 'zh-cn',
+    i18n: { 'zh-cn': zhCn },
+    volume: 0.8,
+    autoplay: true,
+    autoSize: false,
+    autoPlayback: true,
+    autoMini: true,
+    setting: true,
+    hotkey: true,
+    playbackRate: true,
+    aspectRatio: true,
+    screenshot: true,
+    pip: true,
+    airplay: true,
+    fullscreen: true,
+    fullscreenWeb: true,
+    miniProgressBar: true,
+    lock: true,
+    gesture: true,
+    fastForward: true,
+    playsInline: true,
+    backdrop: true,
+    moreVideoAttr: {
+      crossOrigin: 'anonymous',
+      preload: 'auto'
+    },
+    customType: {
+      m3u8(video, url, instance) {
+        if (Hls && Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 90,
+            maxBufferLength: 60
+          })
 
-      // 监听HLS错误
-      hls.value.on(Hls.Events.ERROR, (event, data) => {
-        console.error('HLS error:', event, data)
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              error.value = '网络错误，正在重试...'
-              ElMessage.error(error.value)
-              hls.value.startLoad()
-              break
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              error.value = '媒体错误，无法播放'
-              ElMessage.error(error.value)
-              break
-            default:
-              error.value = '视频播放出错，请稍后重试'
-              ElMessage.error(error.value)
-              hls.value.destroy()
-              hls.value = null
-              break
-          }
+          hls.loadSource(url)
+          hls.attachMedia(video)
+
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (!data || !data.fatal) return
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              instance.notice.show = '网络中断，正在重连…'
+              hls.startLoad()
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              instance.notice.show = '媒体解码异常，正在恢复…'
+              hls.recoverMediaError()
+            } else {
+              instance.notice.show = '视频加载失败，请刷新重试'
+              hls.destroy()
+            }
+          })
+
+          instance.hls = hls
+          instance.on('destroy', () => hls.destroy())
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari / iOS 原生 HLS
+          video.src = url
+        } else {
+          instance.notice.show = '当前浏览器不支持 HLS 播放'
         }
-      })
-
-      // 监听加载完成事件
-      hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('Manifest parsed successfully')
-        duration.value = videoRef.value.duration
-        
-        // 尝试自动播放，使用静音播放作为fallback
-        attemptAutoPlay()
-      })
-
-      // 绑定视频元素和HLS源
-      hls.value.attachMedia(videoRef.value)
-      hls.value.loadSource(videoUrl)
-    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-      // 对于支持原生HLS的浏览器
-      videoRef.value.src = videoUrl
-      videoRef.value.addEventListener('loadedmetadata', () => {
-        duration.value = videoRef.value.duration
-        // 尝试自动播放，使用静音播放作为fallback
-        attemptAutoPlay()
-      })
-    } else {
-      error.value = '您的浏览器不支持HLS视频播放'
-      ElMessage.error(error.value)
-    }
-
-    // 监听视频播放事件
-    videoRef.value.addEventListener('play', () => {
-      isPlaying.value = true
-    })
-
-    // 监听视频暂停事件
-    videoRef.value.addEventListener('pause', () => {
-      isPlaying.value = false
-    })
-
-    // 定义并存储事件处理函数
-    videoEventsRefs.value.handleTimeUpdate = function() {
-      if (videoRef.value) {
-        currentTime.value = videoRef.value.currentTime
       }
     }
+  })
 
-    videoEventsRefs.value.handleEnded = function() {
-      isPlaying.value = false
-    }
-
-    // 注册事件监听器
-    videoRef.value.addEventListener('timeupdate', videoEventsRefs.value.handleTimeUpdate)
-    videoRef.value.addEventListener('ended', videoEventsRefs.value.handleEnded)
+  art.value.on('ready', () => {
+    playing.value = true
+  })
+  art.value.on('video:error', () => {
+    playing.value = false
   })
 }
 
-// 尝试自动播放的函数
-const attemptAutoPlay = () => {
-  if (!videoRef.value) return
-
-  // 尝试正常播放
-  videoRef.value.play()
-    .then(() => {
-      isPlaying.value = true
-      console.log('Auto-play succeeded')
-    })
-    .catch(err => {
-      console.warn('Normal auto-play failed, trying muted auto-play:', err)
-      
-      // 尝试静音播放
-      videoRef.value.muted = true
-      videoRef.value.play()
-        .then(() => {
-          isPlaying.value = true
-          console.log('Muted auto-play succeeded')
-          
-          // 延迟1秒后取消静音
-          setTimeout(() => {
-            if (videoRef.value && isPlaying.value) {
-              videoRef.value.muted = false
-            }
-          }, 1000)
-        })
-        .catch(err2 => {
-          console.error('All auto-play attempts failed:', err2)
-          // 不显示错误消息，让用户手动点击播放
-        })
-    })
+/* ----------------------------- 交互 ----------------------------- */
+function goBack() {
+  const back = window.history.state && window.history.state.back
+  if (back) router.back()
+  else router.push('/')
 }
 
-// 创建引用存储事件处理函数
-const videoEventsRefs = ref({})
-
-// 组件卸载时清理HLS播放器和事件监听器
-onUnmounted(() => {
-  // 移除事件监听器
-  if (videoRef.value && videoEventsRefs.value) {
-    videoRef.value.removeEventListener('timeupdate', videoEventsRefs.value.handleTimeUpdate)
-    videoRef.value.removeEventListener('ended', videoEventsRefs.value.handleEnded)
+async function copyLink() {
+  const url = window.location.href
+  try {
+    await navigator.clipboard.writeText(url)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 1600)
+  } catch (err) {
+    window.prompt('复制下面的链接：', url)
   }
-
-  // 清理键盘监听
-  document.removeEventListener('keydown', handleEscKey)
-  document.documentElement.classList.remove('webpage-fullscreen-active')
-
-  // 清理HLS播放器
-  if (hls.value) {
-    hls.value.destroy()
-    hls.value = null
-  }
-})
-
-// 格式化时间
-const formatTime = (seconds) => {
-  if (isNaN(seconds) || seconds === Infinity) return '00:00'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
-// 格式化视频日期
-const formatVideoDate = (timeStr) => {
-  if (!timeStr) return ''
-  const parts = timeStr.split(' ')
-  if (parts.length < 2) return timeStr
-  const date = parts[0]
-  const time = parts[1].replace(/-/g, ':')
-  return `${date} ${time}`
-}
-
-// 返回视频列表
-const backToList = () => {
-  router.push('/')
+function titleOf(item) {
+  if (!item) return ''
+  return item.title.length > 22 ? `${item.title.slice(0, 22)}…` : item.title
 }
 </script>
 
 <template>
-  <div class="video-player-page" :class="{ 'webpage-fullscreen': isWebFullscreen }">
-    <!-- 顶部导航 -->
-    <header class="player-header">
-      <div class="header-container">
-        <button @click="backToList" class="back-button">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-          返回列表
-        </button>
-        <div class="course-info">
-          <h1 class="page-title">{{ video?.title || '视频播放' }}</h1>
-          <p class="course-time">{{ formatVideoDate(video?.time) }}</p>
-        </div>
-        <!-- 网页全屏按钮 -->
-        <button @click="toggleWebFullscreen" class="fullscreen-button" :title="isWebFullscreen ? '退出全屏' : '网页全屏'">
-          <svg v-if="!isWebFullscreen" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- 主要内容区 -->
-    <main class="player-content">
-      <!-- 加载状态 -->
-      <div v-if="loading" class="loading-container">
-        <div class="loading-spinner"></div>
-        <p>加载中...</p>
-      </div>
-
-      <!-- 错误信息 -->
-      <div v-else-if="error" class="error-container">
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#f56c6c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="m15 9-6 6" />
-          <path d="m9 9 6 6" />
+  <div class="player-page">
+    <!-- 返回 + 面包屑 -->
+    <div class="container topbar">
+      <button type="button" class="back" @click="goBack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="m15 18-6-6 6-6" />
         </svg>
-        <p>{{ error }}</p>
-        <button @click="backToList" class="back-button">返回列表</button>
-      </div>
+        返回课程库
+      </button>
+      <p class="crumbs" v-if="lesson">
+        <router-link to="/">课程库</router-link>
+        <span aria-hidden="true">/</span>
+        <router-link :to="{ path: '/', query: { subject: lesson.subject } }">{{ lesson.subject }}</router-link>
+        <span aria-hidden="true">/</span>
+        <em>{{ lesson.date }}</em>
+      </p>
+    </div>
 
-      <!-- 视频和内容区域 -->
-      <div v-else-if="video" class="play-lt">
-        <div class="video-container">
-          <div class="video-player">
-            <video
-              ref="videoRef"
-              class="video-element"
-              controls
-              :autoplay="true"
-            >
-              您的浏览器不支持视频播放
-            </video>
-          </div>
+    <div class="container">
+      <!-- 加载中 -->
+      <div v-if="loading" class="stage stage--solo">
+        <div class="skeleton-stage">
+          <div class="spinner"></div>
+          <p>正在准备播放器…</p>
         </div>
       </div>
-    </main>
+
+      <!-- 出错（无课程 / 数据失败） -->
+      <div v-else-if="error && !lesson" class="stage stage--solo">
+        <div class="skeleton-stage">
+          <div class="badge-error">!</div>
+          <p>{{ error }}</p>
+          <button type="button" class="ghost-btn" @click="goBack">返回课程库</button>
+        </div>
+      </div>
+
+      <!-- 正常内容 -->
+      <template v-else-if="lesson">
+        <header class="head">
+          <div class="head__text">
+            <div class="head__tags">
+              <span class="tag" :style="{ '--accent': lesson.color }">{{ lesson.subject }}</span>
+              <span v-if="lesson.grade" class="tag tag--ghost">{{ lesson.grade }}</span>
+            </div>
+            <h1 class="head__title">{{ lesson.title }}</h1>
+            <p class="head__meta">
+              <span>{{ lesson.date }}</span>
+              <span v-if="lesson.clock">· {{ lesson.clock }}</span>
+              <span>· #{{ lesson.id }}</span>
+            </p>
+          </div>
+
+          <div class="head__actions">
+            <button type="button" class="ghost-btn" @click="copyLink">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                aria-hidden="true">
+                <rect x="9" y="9" width="12" height="12" rx="2.5" />
+                <path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H5.5A2.5 2.5 0 0 0 3 5.5v7A2.5 2.5 0 0 0 5.5 15" />
+              </svg>
+              {{ copied ? '已复制' : '复制链接' }}
+            </button>
+            <a class="ghost-btn" :href="lesson.playUrl" target="_blank" rel="noopener noreferrer">m3u8 直链</a>
+          </div>
+        </header>
+
+        <div class="layout">
+          <div class="main-col">
+            <!-- ArtPlayer 容器 -->
+            <div class="stage">
+              <div ref="stageRef" class="stage__art"></div>
+              <div v-if="error" class="stage__mask">
+                <p>{{ error }}</p>
+                <button type="button" class="ghost-btn ghost-btn--light" @click="openCurrent">重试</button>
+              </div>
+            </div>
+
+            <!-- 上一节 / 下一节 -->
+            <div class="steppers">
+              <router-link
+                v-if="around.prev"
+                class="stepper"
+                :to="{ path: '/player', query: { id: String(around.prev.id) } }"
+              >
+                <span class="stepper__label">上一节</span>
+                <span class="stepper__title">{{ titleOf(around.prev) }}</span>
+              </router-link>
+              <span v-else class="stepper stepper--empty">
+                <span class="stepper__label">上一节</span>
+                <span class="stepper__title">已经是第一节</span>
+              </span>
+
+              <router-link
+                v-if="around.next"
+                class="stepper stepper--right"
+                :to="{ path: '/player', query: { id: String(around.next.id) } }"
+              >
+                <span class="stepper__label">下一节</span>
+                <span class="stepper__title">{{ titleOf(around.next) }}</span>
+              </router-link>
+              <span v-else class="stepper stepper--right stepper--empty">
+                <span class="stepper__label">下一节</span>
+                <span class="stepper__title">已经是最后一节</span>
+              </span>
+            </div>
+
+            <!-- 课程信息 -->
+            <section class="info-card">
+              <h2>课程信息</h2>
+              <dl class="info-grid">
+                <div v-for="row in infoRows" :key="row.label" class="info-row">
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
+              <p v-if="playing" class="info-tip">播放位置会自动记住，下次打开自动续播。</p>
+            </section>
+          </div>
+
+          <!-- 侧栏：同科目 -->
+          <aside class="side">
+            <div class="side__head">
+              <h2>同科目课程</h2>
+              <router-link class="side__all" :to="{ path: '/', query: { subject: lesson.subject } }">
+                查看全部
+              </router-link>
+            </div>
+
+            <ul v-if="related.length" class="side-list">
+              <li v-for="item in related" :key="item.id">
+                <router-link
+                  class="side-item"
+                  :class="{ 'side-item--current': item.id === lesson.id }"
+                  :to="{ path: '/player', query: { id: String(item.id) } }"
+                >
+                  <span class="side-item__date">{{ item.date }}</span>
+                  <span class="side-item__title">{{ item.title }}</span>
+                </router-link>
+              </li>
+            </ul>
+            <p v-else class="side__empty">这门学科暂时没有其它课程。</p>
+          </aside>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.video-player-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background-color: #f5f5f5;
-  color: #333;
-  width: 100vw;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+.player-page {
+  padding-top: 18px;
 }
 
-/* 顶部导航 */
-.player-header {
-  background-color: #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  flex-shrink: 0;
-}
-
-.header-container {
-  width: 100%;
-  margin: 0;
-  padding: 12px 20px;
+/* ------------------------------ 顶部 ------------------------------ */
+.topbar {
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 60px;
-  box-sizing: border-box;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 10px;
 }
 
-.back-button {
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: all 0.18s var(--ease);
+}
+
+.back:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateX(-2px);
+}
+
+.back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.crumbs a {
+  color: var(--text-2);
+}
+
+.crumbs a:hover {
+  color: var(--brand-600);
+}
+
+.crumbs em {
+  font-style: normal;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 标题区 ------------------------------ */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.head__tags {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: none;
-  border: none;
-  color: #409eff;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  height: 36px;
+  margin-bottom: 8px;
 }
 
-.page-title {
-  font-size: 18px;
+.tag {
+  --accent: var(--brand-500);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
   font-weight: 600;
-  margin: 0;
-  text-align: left;
-  line-height: 1.2;
+  color: var(--accent);
+  background: var(--surface-2);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.course-time {
-  font-size: 12px;
-  color: #606266;
-  margin: 0;
-  line-height: 1.2;
+.tag--ghost {
+  color: var(--text-3);
+  background: var(--surface-2);
+  font-weight: 500;
 }
 
-/* 网页全屏按钮样式 */
-.fullscreen-button {
+.head__title {
+  font-size: clamp(1.15rem, 2.4vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.head__actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  width: 36px;
-  height: 36px;
+  gap: 8px;
 }
 
-.fullscreen-button:hover {
-  background: rgba(0, 0, 0, 0.9);
-}
-
-/* 主要内容区 */
-.player-content {
-  flex: 1;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.loading-container, .error-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.ghost-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 15px;
-  padding: 20px;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: all 0.18s var(--ease);
 }
 
-.play-lt {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
-.video-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background-color: #fff;
+.ghost-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ghost-btn--light {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ------------------------------ 布局 ------------------------------ */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.main-col {
+  min-width: 0;
+}
+
+/* ------------------------------ 播放器 ------------------------------ */
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-lg);
   overflow: hidden;
+  background: #07080d;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+
+.stage__art {
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
 }
 
-.video-player {
-  flex: 1;
+.stage__mask {
+  position: absolute;
+  inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: #000;
-  width: 100%;
-  height: 100%;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+  background: rgba(7, 8, 13, 0.82);
+  backdrop-filter: blur(4px);
 }
 
-.video-element {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  max-width: 100%;
-  max-height: 100%;
+.stage--solo {
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
 }
 
-/* 完全按照油猴脚本实现，确保视频画面被缩放 */
-.webpage-fullscreen {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  z-index: 9999 !important;
-  background-color: black !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  margin: 0 !important;
-  padding: 0 !important;
+.skeleton-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: var(--text-2);
+  font-size: 13.5px;
 }
 
-.webpage-fullscreen .video-container {
-  width: 100% !important;
-  height: 100% !important;
-  background-color: black !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+.spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(99, 102, 241, 0.25);
+  border: 3px solid color-mix(in srgb, var(--brand-500) 25%, transparent);
+  border-top-color: var(--brand-600);
+  animation: spin 0.9s linear infinite;
 }
 
-.webpage-fullscreen .video-player {
-  width: 100% !important;
-  height: 100% !important;
-  background-color: black !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-}
-
-.webpage-fullscreen .video-element {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  object-position: center center !important;
-  max-width: none !important;
-  max-height: none !important;
-}
-
-/* 保持顶部导航栏可访问 */
-.webpage-fullscreen .player-header {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent) !important;
-  box-shadow: none !important;
-  z-index: 10000 !important;
-  transition: opacity 0.3s ease !important;
-  opacity: 0 !important;
-}
-
-.webpage-fullscreen .player-header:hover {
-  opacity: 1 !important;
-}
-
-.webpage-fullscreen .header-container {
-  background: none !important;
-  padding: 10px 20px !important;
-}
-
-.webpage-fullscreen .page-title,
-.webpage-fullscreen .course-time {
-  color: white !important;
-}
-
-.webpage-fullscreen .back-button {
-  color: white !important;
-}
-
-.webpage-fullscreen .fullscreen-button {
-  background: rgba(255, 255, 255, 0.2) !important;
-  color: white !important;
-}
-
-.webpage-fullscreen .fullscreen-button:hover {
-  background: rgba(255, 255, 255, 0.3) !important;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .fullscreen-button {
-    width: 32px;
-    height: 32px;
-    padding: 6px;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
-  
-  .fullscreen-button svg {
-    width: 16px;
-    height: 16px;
+}
+
+.badge-error {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--danger);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* ------------------------------ 上下节 ------------------------------ */
+.steppers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: all 0.18s var(--ease);
+  min-width: 0;
+}
+
+.stepper:hover {
+  border-color: var(--brand-500);
+  color: var(--text);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.stepper--right {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.stepper--empty {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.stepper__label {
+  font-size: 11.5px;
+  color: var(--text-3);
+  letter-spacing: 0.4px;
+}
+
+.stepper__title {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ------------------------------ 信息卡 ------------------------------ */
+.info-card {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.info-card h2 {
+  font-size: 14px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px 18px;
+  margin: 0;
+}
+
+.info-row dt {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+.info-row dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.info-tip {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 侧栏 ------------------------------ */
+.side {
+  position: sticky;
+  top: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  max-height: calc(100vh - 100px);
+  overflow: hidden;
+}
+
+.side__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.side__head h2 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.side__all {
+  font-size: 12px;
+  color: var(--brand-600);
+}
+
+.side-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.side-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  transition: background-color 0.15s var(--ease);
+}
+
+.side-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.side-item--current {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+.side-item__date {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.side-item__title {
+  font-size: 13px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.side__empty {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* ------------------------------ 响应式 ------------------------------ */
+@media (max-width: 1080px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    position: static;
+    max-height: none;
+  }
+
+  .side-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 4px;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar .crumbs {
+    display: none;
+  }
+
+  .head__actions {
+    width: 100%;
+  }
+
+  .head__actions .ghost-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .steppers {
+    grid-template-columns: 1fr;
   }
 }
 </style>
